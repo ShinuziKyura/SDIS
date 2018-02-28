@@ -9,7 +9,7 @@ public class MulticastConnection extends DatagramConnection {
 	public static final boolean FEUP_NET = true;
 
 	public MulticastConnection(String address, int port) throws IOException {
-		super(port);
+		super();
 		
 		this.socket = new MulticastSocket(port);
 		this.address = address;

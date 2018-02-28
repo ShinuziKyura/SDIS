@@ -84,5 +84,6 @@ public class Server {
 		Server s = new Server(25566, NULL_ADDRESS, NULL_PORT);
 
 		s.processRequests();
+		
 	}
 }

@@ -15,6 +15,10 @@ public class DatagramConnection {
 		this.buffer = new byte[1024];
 	}
 	
+	protected DatagramConnection() {
+		this.buffer = new byte[1024];
+	}
+	
 	public void send(String message, String address, int port) throws IOException {
 		int packet_amount = (message.length() - 1) / buffer.length + 1;
 		
