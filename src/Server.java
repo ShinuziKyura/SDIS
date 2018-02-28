@@ -43,7 +43,7 @@ public class Server {
 	public void processRequests() throws IOException {
 		String[] request = null;
 		do {
-			request = socket.receive().split(" ");
+			request = this.socket.receive().split(" ");
 		} while (this.process(request));
 	}
 
