@@ -3,10 +3,13 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 public class Peer {
 	private int id;
-	private MulticastConnection mc_socket;  // multicast control
-	private MulticastConnection mdb_socket; // multicast data backup
-	private MulticastConnection mdr_socket; // multicast data restore
+	private MulticastConnection mcSocket;  // multicast control
+	private MulticastConnection mdbSocket; // multicast data backup
+	private MulticastConnection mdrSocket; // multicast data restore
 	private ScheduledThreadPoolExecutor threadpool;
+	private PeerListener mcListener;
+	private PeerListener mdbListener;
+	private PeerListener mdrListener;
 	
 	public static String DBS_TEST = "dbstest";
 	
@@ -16,10 +19,11 @@ public class Peer {
 				String mdr_addr, short mdr_port) throws IOException
 	{
 		id = server_id;
-		mc_socket = new MulticastConnection(mc_addr, mc_port);
-		mdb_socket = new MulticastConnection(mdb_addr, mdb_port);
-		mdr_socket = new MulticastConnection(mdr_addr, mdr_port);
-		threadpool = new ScheduledThreadPoolExecutor()
+		mcSocket = new MulticastConnection(mc_addr, mc_port);
+		mdbSocket = new MulticastConnection(mdb_addr, mdb_port);
+		mdrSocket = new MulticastConnection(mdr_addr, mdr_port);
+		threadpool = new ScheduledThreadPoolExecutor(3);
+		
 	}
 	
 	public boolean backup(String path, int rep_deg)
