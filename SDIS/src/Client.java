@@ -1,5 +1,7 @@
 import java.io.IOException;
 
+import dbs.DatagramConnection;
+
 public class Client extends DatagramConnection{
 	public static void main(String[] args) throws IOException {
 		Client c = new Client(25565);
