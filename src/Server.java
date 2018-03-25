@@ -46,7 +46,7 @@ public class Server {
 	public void processRequests() throws IOException {
 		String[] request = null;
 		do {
-			request = this.socket.receive().split(" ");
+	//		request = this.socket.receive().split(" ");
 		} while (this.process(request));
 	}
 
@@ -57,21 +57,21 @@ public class Server {
 		case "REGISTER":
 			if(!info.containsKey(request[1])){
 				info.put(request[1],request[2]);
-				socket.send(info.size()+"", "localhost", 25565);
+		//		socket.send(info.size()+"", "localhost", 25565);
 				System.out.println("Registered vehicle!");
 			}
 			else{
-				socket.send(-1+"", "localhost", 25565);
+		//		socket.send(-1+"", "localhost", 25565);
 				System.out.println("Unable to register vehicle...");
 			}
 			break;
 		case "LOOKUP":
 			if(info.containsKey(request[1])){
-				socket.send(info.get(request[1]), "localhost", 25565);
+		//		socket.send(info.get(request[1]), "localhost", 25565);
 				System.out.println("Vehicle found!");
 			}
 			else{
-				socket.send("NOT_FOUND", "localhost", 25565);
+		//		socket.send("NOT_FOUND", "localhost", 25565);
 				System.out.println("Vehicle not found!");
 			}
 			break;

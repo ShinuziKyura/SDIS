@@ -25,16 +25,16 @@ public class Client extends DatagramConnection{
 	
 	public void register(String message, String ip, int port) throws IOException
 	{
-		this.send("REGISTER " + message, ip, port);
+	//	this.send("REGISTER " + message, ip, port);
 	}
 	
 	public void lookup(String message, String ip, int port) throws IOException
 	{
-		this.send("LOOKUP " + message, ip, port);
+	//	this.send("LOOKUP " + message, ip, port);
 	}
 	
 	public void close(String ip, int port) throws IOException
 	{
-		this.send("CLOSE", ip, port);
+	//	this.send("CLOSE", ip, port);
 	}
 }

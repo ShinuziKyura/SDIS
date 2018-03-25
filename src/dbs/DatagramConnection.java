@@ -1,24 +1,26 @@
 package dbs;
+
+import java.net.InetAddress;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.MulticastSocket;
 import java.io.IOException;
 
 public class DatagramConnection {
+	protected byte[] buffer;
+
 	protected DatagramPacket packet;
 	protected DatagramSocket socket;
-	protected byte[] buffer;
-	
+
 //	protected static final String EOM = "@EOM"; // Needs adjustment
 	protected static final int BUFFER_SIZE = 65536;
 
-	public DatagramConnection(int port) throws IOException {
-		this.socket = new DatagramSocket(port);
-		this.buffer = new byte[BUFFER_SIZE];
-	}
-	
 	protected DatagramConnection() {
+	}
+
+	public DatagramConnection(int port) throws IOException {
 		this.buffer = new byte[BUFFER_SIZE];
+		this.socket = new DatagramSocket(port);
 	}
 	
 /*	public void send(String message, String address, int port) throws IOException {
