@@ -7,7 +7,7 @@ public class MulticastConnection extends DatagramConnection {
 	private String address;
 	private int port;
 	
-	public static final boolean FEUP_NET = true;
+	public static boolean LAN = true;
 
 	public MulticastConnection(String address, int port) throws IOException {
 		super();
@@ -16,7 +16,7 @@ public class MulticastConnection extends DatagramConnection {
 		this.address = address;
 		this.port = port;
 		
-		if (FEUP_NET) {
+		if (LAN) {
 			((MulticastSocket) this.socket).setTimeToLive(1);
 		}
 		
