@@ -1,8 +1,28 @@
 package dbs;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 public class PeerProtocol {
 
+	
+	private String hash(String text) throws NoSuchAlgorithmException {
+		MessageDigest digest;
+		digest = MessageDigest.getInstance("SHA-256");
+		
+		String hash_string="";
+		byte[] hash = digest.digest(text.getBytes());
+		
+		for(int i=0; i < hash.length; i++) {
+			hash_string=hash_string + String.format("%02x", hash[i]);
+		}
+
+		return hash_string;
+	}
 }
+
+
+
 /*
 at buffer[0]:
 MessageType: 8 (trailing whitespace when its less than 8 characters)
