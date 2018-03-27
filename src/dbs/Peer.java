@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.net.NetworkInterface;
@@ -11,7 +12,7 @@ import java.net.InetAddress;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.TimeUnit;
+import connection.MulticastConnection;
 
 public class Peer {
 	String id;
@@ -53,13 +54,7 @@ public class Peer {
 
 		// Goto client interface
 
-		try {
-			TimeUnit.MILLISECONDS.sleep(1000);
-		}
-		catch (InterruptedException e) {
-
-		}
-
+        // Remove this code after client interface is complete
 		MCChannel.stop();
 		MDBChannel.stop();
 		MDRChannel.stop();

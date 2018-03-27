@@ -1,8 +1,8 @@
 package dbs;
 
 import java.io.IOException;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import connection.MulticastConnection;
 
 public class PeerChannel implements Runnable {
 	private Peer peer;

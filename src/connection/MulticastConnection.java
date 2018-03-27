@@ -1,4 +1,4 @@
-package dbs;
+package connection;
 
 import java.net.InetAddress;
 import java.net.MulticastSocket;
