@@ -16,15 +16,33 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	private byte[] message;
+	private String message;
 
 	public PeerProtocol(byte[] message) {
-		this.message = message;
+		this.message = new String(message);
 	}
 
 	@Override
 	public void run() {
-
+		String[] message_array = message.split("\r\n\r\n", 2);
+		
+		String[] message_header = message_array[0].split("[ ]+");
+		byte[] message_body = message_array[1].getBytes();
+		
+		switch(message_header[0]) {
+		case "PUTCHUNK":
+			break;
+		case "STORED":
+			break;
+		case "GETCHUNK":
+			break;
+		case "CHUNK":
+			break;
+		case "DELETE":
+			break;
+		case "REMOVED":
+			break;
+		}
 	}
 
 	public static String hash(String text) {

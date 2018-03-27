@@ -68,7 +68,7 @@ public class Peer implements PeerInterface {
 	public final Version PROTOCOL_VERSION;
 	public final String ACCESS_POINT;
 
-	String id;
+	String id; // id needs to be an integer
 	Random generator;
 	ThreadPoolExecutor executor;
 	
