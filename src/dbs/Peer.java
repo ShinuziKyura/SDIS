@@ -48,6 +48,7 @@ public class Peer implements PeerInterface {
 							 "225.0.0.0", 8002);
 
 		peer.run();
+		
 	}
 	/*
 		Internal classes
