@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class PeerChannel implements Runnable {
 	private Peer peer;
 	private MulticastConnection socket;
-	private ThreadPoolExecutor threadpool;
 	private AtomicBoolean running;
 	
 	public PeerChannel(Peer peer, MulticastConnection socket) {
@@ -18,16 +17,13 @@ public class PeerChannel implements Runnable {
 	
 	@Override
 	public void run() {
-		while (running.get())
-		{
-			try
-			{
-				String message = socket.receive();
-			//	threadpool.execute(new PeerProtocol( process(message);
+		while (running.get()) {
+			try {
+				peer.executor.execute(new PeerProtocol(socket.receive()));
 			}
-			catch (IOException e)
-			{
-				
+			catch (IOException e) {
+				// Socket closed, probably terminating,
+				// but we'll keep trying to receive() until we are explicitly told to stop
 			}
 		}
 	}
