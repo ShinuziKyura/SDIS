@@ -121,9 +121,19 @@ public class Peer implements PeerInterface {
 		MCChannel = new PeerChannel(this, MCSocket);
 		MDBChannel = new PeerChannel(this, MDBSocket);
 		MDRChannel = new PeerChannel(this, MDRSocket);
-
+		
+		Registry registry;
+		
 		try {
-			LocateRegistry.createRegistry(Registry.REGISTRY_PORT).bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
+			registry = LocateRegistry.createRegistry(Registry.REGISTRY_PORT);
+		}
+		catch(Exception e) {
+			registry = LocateRegistry.getRegistry(Registry.REGISTRY_PORT);
+		}
+		
+		
+		try {
+			registry.bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
 		}
 		catch (AlreadyBoundException e) {
 			UnicastRemoteObject.unexportObject(this, true);

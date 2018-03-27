@@ -31,16 +31,22 @@ public class PeerProtocol implements Runnable {
 		
 		switch(message_header[0]) {
 		case "PUTCHUNK":
+			System.out.println("PUTCHUNK message received!");
 			break;
 		case "STORED":
+			System.out.println("STORED message received!");
 			break;
 		case "GETCHUNK":
+			System.out.println("GETCHUNK message received!");
 			break;
 		case "CHUNK":
+			System.out.println("CHUNK message received!");
 			break;
 		case "DELETE":
+			System.out.println("DELETE message received!");
 			break;
 		case "REMOVED":
+			System.out.println("REMOVED message received!");
 			break;
 		}
 	}
