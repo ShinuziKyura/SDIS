@@ -1,6 +1,7 @@
 package dbs;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import connection.MulticastConnection;
 
@@ -17,13 +18,26 @@ public class PeerChannel implements Runnable {
 	
 	@Override
 	public void run() {
+		long timeout = 1;
 		while (running.get()) {
 			try {
 				peer.executor.execute(new PeerProtocol(socket.receive()));
+				timeout = 1;
 			}
 			catch (IOException e) {
 				// Socket closed, probably terminating,
 				// but we'll keep trying to receive() until we are explicitly told to stop
+
+				try {
+					TimeUnit.SECONDS.sleep(timeout);
+				}
+				catch (InterruptedException ee) {
+					// Not gonna happen
+				}
+
+				if (timeout < 60) {
+					timeout += timeout;
+				}
 			}
 		}
 	}

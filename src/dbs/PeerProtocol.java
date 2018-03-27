@@ -12,7 +12,7 @@ public class PeerProtocol implements Runnable {
 		}
 		catch(NoSuchAlgorithmException e) {
 			// Should NEVER throw this exception
-			System.err.println("Couldn't initialize hasher: BACKUP service unavailable");
+			System.err.println("Could not initialize hasher - Backup protocol unavailable");
 		}
 	}
 
