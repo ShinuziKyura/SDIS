@@ -37,7 +37,7 @@ public class PeerProtocol implements Runnable {
 			}
 		}
 		
-		switch(message_header[0]) {
+		switch(message_header[0].toUpperCase()) {
 		case "PUTCHUNK":
 			System.out.println("PUTCHUNK message received!");
 			break;
