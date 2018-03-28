@@ -35,12 +35,12 @@ public class Peer implements PeerInterface {
 			"6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{1,3}|[0-9]";
 
 	public static void main(String[] args) throws PeerException, IOException {
-		if (args.length != 8 || !(Pattern.matches(PROTOCOL_VERSION_REGEX, args[0]) &&
+		/*if (args.length != 8 || !(Pattern.matches(PROTOCOL_VERSION_REGEX, args[0]) &&
 								  Pattern.matches(ADDRESS_REGEX, args[2]) && Pattern.matches(PORT_REGEX, args[3]) &&
 								  Pattern.matches(ADDRESS_REGEX, args[4]) && Pattern.matches(PORT_REGEX, args[5]) &&
 								  Pattern.matches(ADDRESS_REGEX, args[6]) && Pattern.matches(PORT_REGEX, args[7]))) {
 			// Print usage and terminate
-		}
+		}*/
 
 		Peer peer = new Peer("1.0", "DBS_TEST",
 							 "225.0.0.0", 8000,
@@ -158,10 +158,12 @@ public class Peer implements PeerInterface {
 
 		running.setRelease(true);
 
+		MCSocket.send("CHUNK iuhdiuc iuveu \r\n\r\n".getBytes());
+
 		// TODO
 
 		// (Re)move this code after this function is complete
-		try {
+/*		try {
 			LocateRegistry.getRegistry(Registry.REGISTRY_PORT).unbind(ACCESS_POINT);
 		}
 		catch (NotBoundException e) {
@@ -178,7 +180,7 @@ public class Peer implements PeerInterface {
 		MDBSocket.close();
 		MDRSocket.close();
 
-		executor.shutdown();
+		executor.shutdown();*/
 	}
 
 	public void backup(String pathname, int replication_degree) {

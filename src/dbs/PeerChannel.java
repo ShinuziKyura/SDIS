@@ -21,7 +21,8 @@ public class PeerChannel implements Runnable {
 		long timeout = 1;
 		while (running.get()) {
 			try {
-				peer.executor.execute(new PeerProtocol(socket.receive()));
+				byte[] buffer = socket.receive();
+				peer.executor.execute(new PeerProtocol(buffer));
 				timeout = 1;
 			}
 			catch (IOException e) {
