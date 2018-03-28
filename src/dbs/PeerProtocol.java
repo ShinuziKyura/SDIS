@@ -3,6 +3,7 @@ package dbs;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 public class PeerProtocol implements Runnable {
 	private static MessageDigest hasher = null;
@@ -16,18 +17,25 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	private String message;
+	private byte[] message;
 
 	public PeerProtocol(byte[] message) {
-		this.message = new String(message);
+		this.message = message;
 	}
 
 	@Override
 	public void run() {
-		String[] message_array = message.split("\r\n\r\n", 2);
 		
-		String[] message_header = message_array[0].split("[ ]+");
-		byte[] message_body = message_array[1].getBytes();
+		String[] message_header=null;
+		byte[] message_body=null;
+		
+		for(int i = 0; i+3 < message.length; i++) {
+			if(message[i]==0xD && message[i+1]==0xA && message[i+2]==0xD && message[i+3]==0xA) {
+				message_header = new String(Arrays.copyOfRange(message, 0, i)).split("[ ]+");
+				message_body = Arrays.copyOfRange(message, i+4, message.length);
+				break;
+			}
+		}
 		
 		switch(message_header[0]) {
 		case "PUTCHUNK":
