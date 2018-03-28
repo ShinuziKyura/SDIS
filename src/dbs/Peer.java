@@ -1,26 +1,31 @@
 package dbs;
 
-import java.io.IOException;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Collections;
-import java.util.Enumeration;
 import java.net.NetworkInterface;
 import java.net.InetAddress;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
+import java.util.stream.Stream;
 
+import connection.DatagramConnection;
 import connection.MulticastConnection;
 
 public class Peer implements PeerInterface {
@@ -64,13 +69,18 @@ public class Peer implements PeerInterface {
 		}
 	}
 
+	private static final long MAXIMUM_FILE_SIZE = 63999999999L;
+	private static final long MAXIMUM_CHUNK_SIZE = 64000L;
+
 	/*
 		Member variables
 	 */
 	public final Version PROTOCOL_VERSION;
 	public final String ACCESS_POINT;
 
-	String id; // id needs to be an integer
+	Hashtable<String, String> fileIDs;
+
+	String id;
 	Random generator;
 	ThreadPoolExecutor executor;
 	
@@ -78,11 +88,16 @@ public class Peer implements PeerInterface {
 	MulticastConnection MDBSocket; // multicast data backup
 	MulticastConnection MDRSocket; // multicast data restore
 
-	private PeerChannel MCChannel;
-	private PeerChannel MDBChannel;
-	private PeerChannel MDRChannel;
+	AtomicBoolean running;
 
-	private AtomicBoolean running;
+	private PeerChannel MCChannel;
+	private PeerProcessor MCProcessor;
+	private PeerChannel MDBChannel;
+	private PeerProcessor MDBProcessor;
+	private PeerChannel MDRChannel;
+	private PeerProcessor MDRProcessor;
+
+	private ConcurrentLinkedQueue<byte[]> confirmation_messages;
 
 	/*
 		Constructors
@@ -125,7 +140,13 @@ public class Peer implements PeerInterface {
 		MCChannel = new PeerChannel(this, MCSocket);
 		MDBChannel = new PeerChannel(this, MDBSocket);
 		MDRChannel = new PeerChannel(this, MDRSocket);
-		
+
+		MCProcessor = new PeerProcessor(this, MCChannel.link());
+		MDBProcessor = new PeerProcessor(this, MDBChannel.link());
+		MDRProcessor = new PeerProcessor(this, MDRChannel.link());
+
+
+		// Adjust this
 		Registry registry;
 		
 		try {
@@ -134,8 +155,7 @@ public class Peer implements PeerInterface {
 		catch(Exception e) {
 			registry = LocateRegistry.getRegistry(Registry.REGISTRY_PORT);
 		}
-		
-		
+
 		try {
 			registry.bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
 		}
@@ -155,11 +175,14 @@ public class Peer implements PeerInterface {
 		Member functions
 	 */
 	public void run() throws IOException {
-		executor.execute(MCChannel);
-		executor.execute(MDBChannel);
-		executor.execute(MDRChannel);
+		running.set(true);
 
-		running.setRelease(true);
+		executor.execute(MCChannel);
+		executor.execute(MCProcessor);
+		executor.execute(MDBChannel);
+		executor.execute(MDBProcessor);
+		executor.execute(MDRChannel);
+		executor.execute(MDRProcessor);
 
 		// TODO
 
@@ -168,14 +191,12 @@ public class Peer implements PeerInterface {
 			LocateRegistry.getRegistry(Registry.REGISTRY_PORT).unbind(ACCESS_POINT);
 		}
 		catch (NotBoundException e) {
-			// That's weird
+			// That's weird, shouldn't happen
 		}
 
 		UnicastRemoteObject.unexportObject(this, false);
 
-		MCChannel.stop();
-		MDBChannel.stop();
-		MDRChannel.stop();
+		running.set(false);
 
 		MCSocket.close();
 		MDBSocket.close();
@@ -184,8 +205,81 @@ public class Peer implements PeerInterface {
 		executor.shutdown();*/
 	}
 
-	public void backup(String pathname, int replication_degree) {
-		// TODO
+	public void backup(String pathname, int replication_degree) throws IOException {
+		if (replication_degree < 1 || replication_degree > 9) {
+			// No can do
+			return;
+		}
+
+		File file = new File(pathname);
+		if (!file.exists()) {
+			// Say something
+			return;
+		}
+
+		long size = 0;
+		try {
+			size = Files.size(file.toPath());
+		}
+		catch (IOException e) {
+			// No idea why this can throw
+		}
+		if (size > MAXIMUM_FILE_SIZE || size == 0) {
+			// No can do
+			return;
+		}
+
+		String file_id = PeerProtocol.hash(pathname +
+										   Files.getLastModifiedTime(file.toPath()).toString().split("T")[0]);
+
+		long chunk_count = 0;
+		byte[] chunk_body = new byte[(int) MAXIMUM_CHUNK_SIZE];
+
+		//try-with-resources to ensure closing stream
+		try (FileInputStream filestream = new FileInputStream(file);
+			 BufferedInputStream buffer = new BufferedInputStream(filestream)) {
+
+			int chunk_body_length = 0;
+			while ((chunk_body_length = buffer.read(chunk_body)) > 0) {
+				byte[] chunk_header = ("PUTCHUNK " + PROTOCOL_VERSION.MAJOR_NUMBER + "." + PROTOCOL_VERSION.MINOR_NUMBER + " " + id + " " + file_id + " " + chunk_count++ + " " + replication_degree + " \r\n\r\n").getBytes();
+				byte[] chunk = merge(chunk_header, chunk_body);
+			/*	while () {
+					MDBSocket.send(chunk);
+				}*/
+			}
+			if (chunk_body_length == MAXIMUM_CHUNK_SIZE) {
+
+			}
+		}
+		catch (FileNotFoundException e) {
+			// Shouldn't happen
+		}
+
+		/*
+		//try-with-resources to ensure closing stream
+		try (FileInputStream fis = new FileInputStream(file);
+			BufferedInputStream bis = new BufferedInputStream(fis)) {
+
+			int bytesAmount = 0;
+			while ((bytesAmount = bis.read(chunk_buffer)) > 0) {
+				//write each chunk of data into separate file with different number in name
+				String chunkname = String.format("%s.%06d", filename, chunk_count++);
+
+				File newFile = new File(f.getParent(), filePartName);
+				try (FileOutputStream out = new FileOutputStream(newFile)) {
+					out.write(buffer, 0, bytesAmount);
+				}
+			}
+		}
+		catch (FileNotFoundException e) {
+			// Shouldn't happen
+		}
+		 */
+
+		/*String old_file_id = fileIDs.get(pathname);*/
+		/*if (old_file_id != null) {
+			// Execute new PeerProtocol to delete file
+		}*/
 	}
 
 	public void restore(String pathname) {
@@ -243,5 +337,14 @@ public class Peer implements PeerInterface {
 			}
 		}
 		return null;
+	}
+
+	// Because JAVA is SOOOOO high level
+	public static byte[] merge(byte[] first, byte[] second) {
+		byte[] result = new byte[first.length + second.length];
+		for (int i = 0; i < result.length; ++i) {
+			result[i] = (i < first.length ? first[i] : second[i - first.length]);
+		}
+		return result;
 	}
 }

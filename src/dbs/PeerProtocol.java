@@ -17,7 +17,13 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
+	private String protocol;
 	private byte[] message;
+
+/*	public PeerProtocol(String protocol, byte[] message) {
+		this.protocol = protocol;
+		this.message = message;
+	}*/
 
 	public PeerProtocol(byte[] message) {
 		this.message = message;
@@ -25,12 +31,11 @@ public class PeerProtocol implements Runnable {
 
 	@Override
 	public void run() {
-		
 		String[] message_header = null;
 		byte[] message_body = null;
 		
-		for(int i = 0; i+3 < message.length; i++) {
-			if(message[i]==0xD && message[i+1]==0xA && message[i+2]==0xD && message[i+3]==0xA) {
+		for (int i = 0; i + 3 < message.length; ++i) {
+			if (message[i] == 0xD && message[i + 1] == 0xA && message[i + 2] == 0xD && message[i + 3] == 0xA) {
 				message_header = new String(Arrays.copyOfRange(message, 0, i)).split("[ ]+");
 				message_body = Arrays.copyOfRange(message, i+4, message.length);
 				break;

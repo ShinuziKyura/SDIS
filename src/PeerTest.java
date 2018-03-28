@@ -1,15 +1,16 @@
 import java.io.IOException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
+import java.rmi.Naming;
 import java.rmi.NotBoundException;
 
 import dbs.PeerInterface;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
-		PeerInterface peer_interface = (PeerInterface) LocateRegistry.getRegistry(Registry.REGISTRY_PORT).lookup(args[0]);
+		PeerInterface peer_interface = (PeerInterface) Naming.lookup("rmi://localhost/DBS_TEST");//args[0]); // Need to retouch this
 
-		switch (args[1].toLowerCase()) {
+		peer_interface.backup("C:\\Users\\Administrador\\Desktop\\rmi-sdis.txt", 1);
+
+		/*switch (args[1].toLowerCase()) {
 			case "backup":
 				peer_interface.backup(args[2], Integer.valueOf(args[3]));
 				break;
@@ -28,6 +29,6 @@ public class PeerTest {
 			case "stop":
 				// MAYBE add this method to interface later
 				break;
-		}
+		}*/
 	}
 }

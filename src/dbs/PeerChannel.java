@@ -1,6 +1,8 @@
 package dbs;
 
 import java.io.IOException;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import connection.MulticastConnection;
@@ -8,45 +10,30 @@ import connection.MulticastConnection;
 public class PeerChannel implements Runnable {
 	private Peer peer;
 	private MulticastConnection socket;
-	private AtomicBoolean running;
+	private LinkedTransferQueue<byte[]> queue;
 	
 	public PeerChannel(Peer peer, MulticastConnection socket) {
 		this.peer = peer;
 		this.socket = socket;
-		this.running = new AtomicBoolean(true);
+		this.queue = new LinkedTransferQueue<>();
 	}
 	
 	@Override
 	public void run() {
-		long timeout = 1;
-		while (running.get()) {
+		while (peer.running.get()) {
 			try {
 				byte[] buffer = socket.receive();
-				if (!new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+")[2].equals(peer.id)) {
-					peer.executor.execute(new PeerProtocol(buffer));
-				}
-				timeout = 1;
+				queue.put(buffer);
 			}
 			catch (IOException e) {
 				// Socket closed, probably terminating,
 				// but we'll keep trying to receive() until we are explicitly told to stop
-
-				try {
-					TimeUnit.SECONDS.sleep(timeout);
-				}
-				catch (InterruptedException ee) {
-					// Not gonna happen
-				}
-
-				if (timeout < 60) {
-					timeout += timeout;
-				}
 			}
 		}
 	}
-	
-	public void stop() {
-		this.running.set(false);
+
+	LinkedTransferQueue<byte[]> link() {
+		return queue;
 	}
 }
 
