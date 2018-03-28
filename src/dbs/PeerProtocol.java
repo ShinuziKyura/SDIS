@@ -26,8 +26,8 @@ public class PeerProtocol implements Runnable {
 	@Override
 	public void run() {
 		
-		String[] message_header=null;
-		byte[] message_body=null;
+		String[] message_header = null;
+		byte[] message_body = null;
 		
 		for(int i = 0; i+3 < message.length; i++) {
 			if(message[i]==0xD && message[i+1]==0xA && message[i+2]==0xD && message[i+3]==0xA) {

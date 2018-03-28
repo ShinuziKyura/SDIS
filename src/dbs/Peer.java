@@ -7,6 +7,7 @@ import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.Random;
 import java.util.concurrent.Executors;
@@ -42,7 +43,7 @@ public class Peer implements PeerInterface {
 			// Print usage and terminate
 		}*/
 
-		Peer peer = new Peer("1.0", "DBS_TEST",
+		Peer peer = new Peer("1.0", 1234567890,"DBS_TEST",
 							 "225.0.0.0", 8000,
 							 "225.0.0.0", 8001,
 							 "225.0.0.0", 8002);
@@ -86,7 +87,7 @@ public class Peer implements PeerInterface {
 	/*
 		Constructors
 	 */
-	public Peer(String protocol_version, String access_point,
+	public Peer(String protocol_version, int id, String access_point,
 				String MC_address, int MC_port,
 				String MDB_address, int MDB_port,
 				String MDR_address, int MDR_port) throws PeerException, IOException {
@@ -96,7 +97,7 @@ public class Peer implements PeerInterface {
 
 		System.out.println("\nInitializing peer...");
 
-		try {
+/*		try {
 			byte[] hw_addr = testInterfaces().getHardwareAddress();
 			id = Long.toString(ProcessHandle.current().pid()).concat(
 					String.format("@%02x%02x%02x%02x%02x%02x",
@@ -110,7 +111,9 @@ public class Peer implements PeerInterface {
 		catch (NullPointerException e) {
 			throw new PeerException("Could not establish a connection through any available interface" +
 									" - Distributed Backup Service unavailable");
-		}
+		} */
+
+		this.id = Integer.toString(id);
 
 		generator = new Random(ProcessHandle.current().pid());
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
@@ -157,8 +160,6 @@ public class Peer implements PeerInterface {
 		executor.execute(MDRChannel);
 
 		running.setRelease(true);
-
-		MCSocket.send("CHUNK iuhdiuc iuveu \r\n\r\n".getBytes());
 
 		// TODO
 

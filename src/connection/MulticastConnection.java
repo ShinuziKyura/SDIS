@@ -3,6 +3,7 @@ package connection;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.io.IOException;
+import java.net.SocketException;
 
 public class MulticastConnection extends DatagramConnection {
 	private String address;
@@ -39,6 +40,10 @@ public class MulticastConnection extends DatagramConnection {
 /*	public byte[] receive() throws IOException {
 		return super.receive();
 	} */
+
+	public void setTimeout(int timeout) throws SocketException {
+		this.socket.setSoTimeout(timeout);
+	}
 	
 	public void close() throws IOException {
 		((MulticastSocket) this.socket).leaveGroup(InetAddress.getByName(this.address));

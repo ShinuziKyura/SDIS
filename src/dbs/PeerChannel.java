@@ -22,7 +22,9 @@ public class PeerChannel implements Runnable {
 		while (running.get()) {
 			try {
 				byte[] buffer = socket.receive();
-				peer.executor.execute(new PeerProtocol(buffer));
+				if (!new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+")[2].equals(peer.id)) {
+					peer.executor.execute(new PeerProtocol(buffer));
+				}
 				timeout = 1;
 			}
 			catch (IOException e) {
