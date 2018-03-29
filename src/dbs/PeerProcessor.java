@@ -1,5 +1,7 @@
 package dbs;
 
+import dbs.util.PeerUtility;
+
 import java.util.concurrent.LinkedTransferQueue;
 
 public class PeerProcessor implements Runnable {
@@ -23,7 +25,9 @@ public class PeerProcessor implements Runnable {
 
                             break;
                         case "STORED": // MC
-
+                            if (peer.DBReplies.containsKey(message_header[3])) {
+                                peer.DBReplies.get(message_header[3]).put(buffer);
+                            }
                             break;
                         case "GETCHUNK": // MC
 
@@ -37,12 +41,20 @@ public class PeerProcessor implements Runnable {
                         case "REMOVED": // MC
 
                             break;
+                        case "STOP":
+                            while (peer.running.get());
+                            break;
                     }
                 }
             }
-            catch (InterruptedException ee) {
-                // Shouldn't realistically happen
+            catch (InterruptedException e) {
+                // Shouldn't happen
             }
         }
+    }
+
+    public void stop() {
+        queue.put(PeerUtility.generateProtocolHeader(PeerUtility.MessageType.STOP, peer.PROTOCOL_VERSION, peer.id,
+                                                     "null", null, null));
     }
 }

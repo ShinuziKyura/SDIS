@@ -1,11 +1,11 @@
-package connection;
+package net;
 
 import java.net.InetAddress;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.io.IOException;
 
-public class DatagramConnection {
+public class DatagramChannel {
 	protected byte[] buffer;
 
 	protected DatagramPacket packet;
@@ -14,10 +14,10 @@ public class DatagramConnection {
 //	protected static final String EOM = "@EOM"; // Needs adjustment
 	protected static final int BUFFER_SIZE = 65536;
 
-	protected DatagramConnection() {
+	protected DatagramChannel() {
 	}
 
-	public DatagramConnection(int port) throws IOException {
+	public DatagramChannel(int port) throws IOException {
 		this.buffer = new byte[BUFFER_SIZE];
 		this.socket = new DatagramSocket(port);
 	}
@@ -62,18 +62,22 @@ public class DatagramConnection {
 		
 		return message;
 	}*/
-	
+
 	public byte[] receive() throws IOException {
 		this.buffer = new byte[BUFFER_SIZE];
-		
+
 		this.packet = new DatagramPacket(this.buffer, BUFFER_SIZE);
-			
+
 		this.socket.receive(this.packet);
-		
+
 		return this.buffer;
 	}
-	
+
 	public void close() throws IOException {
 		this.socket.close();
+	}
+
+	public boolean isClosed() {
+		return this.socket.isClosed();
 	}
 }

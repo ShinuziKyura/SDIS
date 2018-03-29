@@ -1,18 +1,17 @@
 package dbs;
 
 import java.io.IOException;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import connection.MulticastConnection;
+
+import dbs.util.PeerUtility;
+import net.MulticastChannel;
 
 public class PeerChannel implements Runnable {
 	private Peer peer;
-	private MulticastConnection socket;
+	private MulticastChannel socket;
 	private LinkedTransferQueue<byte[]> queue;
 	
-	public PeerChannel(Peer peer, MulticastConnection socket) {
+	public PeerChannel(Peer peer, MulticastChannel socket) {
 		this.peer = peer;
 		this.socket = socket;
 		this.queue = new LinkedTransferQueue<>();
@@ -26,13 +25,24 @@ public class PeerChannel implements Runnable {
 				queue.put(buffer);
 			}
 			catch (IOException e) {
-				// Socket closed, probably terminating,
-				// but we'll keep trying to receive() until we are explicitly told to stop
+				// Probably terminating, but we'll keep trying to receive()
+                // until running is set to false
 			}
 		}
 	}
 
-	LinkedTransferQueue<byte[]> link() {
+	public void stop() {
+	    while (!socket.isClosed()) {
+            try {
+                socket.close();
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+	public LinkedTransferQueue<byte[]> bind() {
 		return queue;
 	}
 }
@@ -62,9 +72,9 @@ public class PeerChannel implements Runnable {
 	<SenderId>
 		This is the id of the server that has sent the message. This field is useful in many subprotocols. This is encoded as a variable length sequence of ASCII digits.
 	<FileId>
-		This is the file identifier for the backup service. As stated above, it is supposed to be obtained by using the SHA256 cryptographic hash function. As its name indicates its length is 256 bit, i.e. 32 bytes, and should be encoded as a 64 ASCII character sequence.
-		The encoding is as follows: each byte of the hash value is encoded by the two ASCII characters corresponding to the hexadecimal representation of that byte. E.g., a byte with value 0xB2 should be represented by the two char sequence 'B''2' (or 'b''2', it does not matter).
-		The entire hash is represented in big-endian order, i.e. from the MSB (byte 31) to the LSB (byte 0).
+		This is the file identifier for the backup service. As stated above, it is supposed to be obtained by using the SHA256 cryptographic generateFileID function. As its name indicates its length is 256 bit, i.e. 32 bytes, and should be encoded as a 64 ASCII character sequence.
+		The encoding is as follows: each byte of the generateFileID value is encoded by the two ASCII characters corresponding to the hexadecimal representation of that byte. E.g., a byte with value 0xB2 should be represented by the two char sequence 'B''2' (or 'b''2', it does not matter).
+		The entire generateFileID is represented in big-endian order, i.e. from the MSB (byte 31) to the LSB (byte 0).
 	<ChunkNo>
 		This field together with the FileId specifies a chunk in the file. The chunk numbers are integers and should be assigned sequentially starting at 0. It is encoded as a sequence of ASCII characters corresponding to the decimal representation of that number, with the most significant digit first.
 		The length of this field is variable, but should not be larger than 6 chars. Therefore, each file can have at most one million chunks. Given that each chunk is 64 KByte, this limits the size of the files to backup to 64 GByte.
