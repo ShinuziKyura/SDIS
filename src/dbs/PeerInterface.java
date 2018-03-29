@@ -4,15 +4,17 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 public interface PeerInterface extends Remote {
-    void backup(String filename, String fileID, byte[] file, int replication_degree) throws RemoteException;
+    int backup(String filename, String fileID, byte[] file, int replication_degree) throws RemoteException;
 
-    void restore(String filename) throws RemoteException;
+    int restore(String filename) throws RemoteException;
 
-    void delete(String filename) throws RemoteException;
+    int delete(String filename) throws RemoteException;
 
-    void reclaim(int disk_space) throws RemoteException;
+    int reclaim(int disk_space) throws RemoteException;
 
     String state() throws RemoteException;
 
-    void stop() throws RemoteException;
+    int stop() throws RemoteException;
+
+    int stop(long duration) throws RemoteException;
 }

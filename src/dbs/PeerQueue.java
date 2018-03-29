@@ -4,11 +4,11 @@ import dbs.util.PeerUtility;
 
 import java.util.concurrent.LinkedTransferQueue;
 
-public class PeerProcessor implements Runnable {
+public class PeerQueue implements Runnable {
     private Peer peer;
     private LinkedTransferQueue<byte[]> queue;
 
-    public PeerProcessor(Peer peer, LinkedTransferQueue<byte[]> queue) {
+    public PeerQueue(Peer peer, LinkedTransferQueue<byte[]> queue) {
         this.peer = peer;
         this.queue = queue;
     }
@@ -19,7 +19,7 @@ public class PeerProcessor implements Runnable {
             try {
                 byte[] buffer = queue.take();
                 String[] message_header = new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+");
-                if (!message_header[2].equals(peer.id)) {
+                if (!message_header[2].equals(peer.ID)) {
                     switch(message_header[0].toUpperCase()) {
                         case "PUTCHUNK": // MDB
 
@@ -41,9 +41,6 @@ public class PeerProcessor implements Runnable {
                         case "REMOVED": // MC
 
                             break;
-                        case "STOP":
-                            while (peer.running.get());
-                            break;
                     }
                 }
             }
@@ -54,7 +51,7 @@ public class PeerProcessor implements Runnable {
     }
 
     public void stop() {
-        queue.put(PeerUtility.generateProtocolHeader(PeerUtility.MessageType.STOP, peer.PROTOCOL_VERSION, peer.id,
+        queue.put(PeerUtility.generateProtocolHeader(PeerUtility.MessageType.STOP, peer.PROTOCOL_VERSION, peer.ID,
                                                      "null", null, null));
     }
 }

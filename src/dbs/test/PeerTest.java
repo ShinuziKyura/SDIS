@@ -12,7 +12,7 @@ import dbs.util.PeerUtility;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
-		/* Single-comment this line to activate the check
+		//* Single-comment this line to activate the check
 	    if (args.length < 2) /**/ {
 	    	System.err.println("\n######## Distributed Backup Service ########" +
                                "\nPeerTest must be called with the following arguments:" +
@@ -47,8 +47,7 @@ public class PeerTest {
                 String fileID = PeerUtility.generateFileID(filepath);
                 byte[] file = Files.readAllBytes(filepath);
 
-                peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]));
-				break;
+                System.exit(peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3])));
 			case "RESTORE":
 			//	peer_interface.restore(args[2]);
 				break;
@@ -62,8 +61,7 @@ public class PeerTest {
 			//	System.out.println(peer_interface.state());
 				break;
 			case "STOP":
-				peer_interface.stop();
-				break;
+				System.exit(peer_interface.stop());
 		}
 	}
 }

@@ -6,29 +6,16 @@ import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LinkedTemporaryQueue<E> extends LinkedTransferQueue<E> {
-    private Timer timer;
-    private AtomicBoolean active;
-
-    private class TimerQueue extends TimerTask {
-        public TimerQueue() {
-            super();
-        }
-
-        @Override
-        public void run() {
-            active.setRelease(false);
-        }
-    }
-
-    public LinkedTemporaryQueue() {
-        super();
-        timer = new Timer();
-        active = new AtomicBoolean(false);
-    }
+    private AtomicBoolean active = new AtomicBoolean(false);
 
     public void activate(long duration) {
-        if (!active.compareAndExchange(false, true)) {
-            timer.schedule(new TimerQueue(), duration);
+        if (active.compareAndSet(false, true)) {
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    active.setRelease(false);
+                }
+            }, duration);
         }
     }
 
@@ -40,7 +27,7 @@ public class LinkedTemporaryQueue<E> extends LinkedTransferQueue<E> {
     }
 
     @Override
-    public E take() {
+    public E poll() {
         E object = null;
         while (object == null && active.getAcquire()) {
             object = super.poll();
