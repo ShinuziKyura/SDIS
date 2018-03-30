@@ -253,11 +253,11 @@ public class Peer implements PeerInterface {
 		     FileInputStream chunks_stream = new FileInputStream("src/dbs/data/chunks.data")) {
 
 			ObjectInputStream objectstream = new ObjectInputStream(files_stream);
-			stored_files = (Hashtable<String, String>) objectstream.readObject();
+			stored_files = /*new Hashtable<>();*/ (Hashtable<String, String>) objectstream.readObject();
 			objectstream.close();
 
 			objectstream = new ObjectInputStream(chunks_stream);
-			stored_chunks = (Hashtable<String, String>) objectstream.readObject();
+			stored_chunks = /*new Hashtable<>();*/ (Hashtable<String, String>) objectstream.readObject();
 			objectstream.close();
 		}
 		catch (IOException | ClassNotFoundException e) {

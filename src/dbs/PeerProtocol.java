@@ -15,6 +15,9 @@ public class PeerProtocol implements Runnable {
 	private byte[] body;
 
 	public PeerProtocol(Peer peer, byte[] message) {
+		if (peer.processes.getAndIncrement() < 0) {
+			return;
+		}
 		this.peer = peer;
 		String header = new String(message).split("\r\n\r\n", 2)[0];
 		this.header = header.split("[ ]+");
@@ -24,26 +27,22 @@ public class PeerProtocol implements Runnable {
 
 	@Override
 	public void run() {
-		if (peer.processes.getAndIncrement() < 0) {
-			peer.processes.decrementAndGet();
-			return;
+		if (peer != null) {
+			switch (header[0].toUpperCase()) {
+				case "PUTCHUNK":
+					backup();
+					break;
+				case "GETCHUNK":
+					restore();
+					break;
+				case "DELETE":
+					delete();
+					break;
+				case "REMOVED":
+					reclaim();
+					break;
+			}
 		}
-
-		switch(header[0].toUpperCase()) {
-			case "PUTCHUNK":
-				backup();
-				break;
-			case "GETCHUNK":
-				restore();
-				break;
-			case "DELETE":
-				delete();
-				break;
-			case "REMOVED":
-				reclaim();
-				break;
-		}
-
 		peer.processes.decrementAndGet();
 	}
 
@@ -114,7 +113,8 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-				replies.init((1 << requests++), TimeUnit.SECONDS);
+			//	replies.init((1 << requests++), TimeUnit.SECONDS);
+				replies.init(1 + requests++, TimeUnit.MILLISECONDS); // DEBUG
 				while (replies.take() != null) {
 					++stored;
 				}
@@ -127,11 +127,12 @@ public class PeerProtocol implements Runnable {
 			}
 		} while (++chunk_count < chunk_amount && stored != 0);
 
-		if (stored == 0 && chunk_count != 0) {
-			peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(
-					MessageType.DELETE, peer.PROTOCOL_VERSION,
-					peer.ID, peer.stored_files.remove(filename),
-					null, null)));
+		if (stored == 0) {
+			old_fileID = peer.stored_files.remove(filename);
+			if (chunk_count != 1) {
+				peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(
+						MessageType.DELETE, peer.PROTOCOL_VERSION, peer.ID, old_fileID, null, null)));
+			}
 		}
 
 		peer.DBMessages.remove(fileID);
