@@ -1,18 +1,18 @@
-package rmi;
+package dbs.rmi;
 
 import java.io.Serializable;
 
-import util.function.SerializableFunction;
+import dbs.util.function.SerializableFunction;
 
-public class RMIResult<T> implements Serializable {
+public class RemoteFunction<T> implements Serializable {
 	private SerializableFunction<T> operation;
 	private Object[] operators;
 
-	public RMIResult (SerializableFunction<T> operation) {
+	public RemoteFunction(SerializableFunction<T> operation) {
 		this.operation = operation;
 	}
 
-	public RMIResult (SerializableFunction<T> operation, Object[] operators) {
+	public RemoteFunction(SerializableFunction<T> operation, Object[] operators) {
 		this.operation = operation;
 		this.operators = operators;
 	}

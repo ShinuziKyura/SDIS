@@ -1,9 +1,9 @@
-package dbs;
+package dbs.peer;
 
 import java.io.IOException;
 import java.util.concurrent.LinkedTransferQueue;
 
-import net.MulticastChannel;
+import dbs.net.MulticastChannel;
 
 public class PeerChannel implements Runnable {
 	private Peer peer;
@@ -41,7 +41,8 @@ public class PeerChannel implements Runnable {
         }
     }
 
-	public LinkedTransferQueue<byte[]> queue() {
+	public LinkedTransferQueue<byte[]> queue(PeerQueue.ChannelQueue check) {
+		check.getClass();
 		return queue;
 	}
 }

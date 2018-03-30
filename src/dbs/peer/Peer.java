@@ -1,4 +1,4 @@
-package dbs;
+package dbs.peer;
 
 import java.io.IOException;
 import java.io.File;
@@ -15,7 +15,6 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.Random;
 import java.util.Hashtable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -23,16 +22,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
-import dbs.PeerUtility.ProtocolVersion;
-import rmi.RMIResult;
-import net.MulticastChannel;
-import util.concurrent.LinkedTransientQueue;
+import dbs.peer.PeerUtility.ProtocolVersion;
+import dbs.rmi.RemoteFunction;
+import dbs.net.MulticastChannel;
+import dbs.util.concurrent.LinkedTransientQueue;
 
 public class Peer implements PeerInterface {
 
-	/****************************************************************************************************
-	 *** Main *******************************************************************************************
-	 ****************************************************************************************************/
+	/***************************************************************************************************
+	***** Main *****************************************************************************************
+	***************************************************************************************************/
 
 	public static void main(String[] args) throws IOException {
 		//* Single-comment this line to activate the check
@@ -68,44 +67,43 @@ public class Peer implements PeerInterface {
 		peer.run();
 	}
 
-	/****************************************************************************************************
-	 *** Member constants *******************************************************************************
-	 ****************************************************************************************************/
+	/***************************************************************************************************
+	***** Member constants *****************************************************************************
+	***************************************************************************************************/
 
 	final String ID;
 	final ProtocolVersion PROTOCOL_VERSION;
 	final String ACCESS_POINT;
 
-	/****************************************************************************************************
-	 *** Member variables *******************************************************************************
-	 ****************************************************************************************************/
+	/***************************************************************************************************
+	***** Member variables *****************************************************************************
+	***************************************************************************************************/
 
 	AtomicInteger processes;
 	AtomicBoolean running;
 
-	Random generator;
 	ThreadPoolExecutor executor;
 
 	Hashtable<String, String> stored_files;
-	Hashtable<String, String> stored_chunks;
+	Hashtable<String, AtomicInteger> stored_chunks;
 
 	Hashtable<String, LinkedTransientQueue<byte[]>> DBMessages;
 
 	MulticastChannel MCSocket;  // multicast control
-	MulticastChannel MDBSocket; // multicast data backup
-	MulticastChannel MDRSocket; // multicast data restore
+	MulticastChannel MDBSocket; // multicast metadata backup
+	MulticastChannel MDRSocket; // multicast metadata restore
 
 	private PeerChannel MCChannel;
 	private PeerChannel MDBChannel;
 	private PeerChannel MDRChannel;
 
-	private PeerDispatcher MCQueue;
-	private PeerDispatcher MDBQueue;
-	private PeerDispatcher MDRQueue;
+	private PeerQueue MCQueue;
+	private PeerQueue MDBQueue;
+	private PeerQueue MDRQueue;
 
-	/****************************************************************************************************
-	 *** Member functions *******************************************************************************
-	 ****************************************************************************************************/
+	/***************************************************************************************************
+	***** Member functions *****************************************************************************
+	***************************************************************************************************/
 
 	public void run() {
 		// Subject to change
@@ -147,37 +145,26 @@ public class Peer implements PeerInterface {
 
 		executor.shutdown();
 
-		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/data/files.new.data");
-		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/data/chunks.new.data")) {
+		ObjectOutputStream objectstream;
+		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/peer/metadata/files.new");
+		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/peer/metadata/chunks.new");
+		     ObjectOutputStream files_object_stream = new ObjectOutputStream(files_stream);
+		     ObjectOutputStream chunks_object_stream = new ObjectOutputStream(chunks_stream)) {
 
-			ObjectOutputStream objectstream = new ObjectOutputStream(files_stream);
-			objectstream.writeObject(stored_files);
-			objectstream.close();
-
-			objectstream = new ObjectOutputStream(chunks_stream);
-			objectstream.writeObject(stored_chunks);
-			objectstream.close();
+			files_object_stream.writeObject(stored_files);
+			chunks_object_stream.writeObject(stored_chunks);
 		}
 		catch (IOException e) {
 			// What should we do?
 		}
 
-		try {
-			Files.delete(Paths.get("src/dbs/data/files.old.data"));
-			File old_files = new File("src/dbs/data/files.data");
-			old_files.renameTo(new File("src/dbs/data/files.old.data"));
-			File new_files = new File("src/dbs/data/files.new.data");
-			new_files.renameTo(new File("src/dbs/data/files.data"));
+		new File("src/dbs/peer/metadata/files.old").delete();
+		new File("src/dbs/peer/metadata/files").renameTo(new File("src/dbs/peer/metadata/files.old"));
+		new File("src/dbs/peer/metadata/files.new").renameTo(new File("src/dbs/peer/metadata/files"));
 
-			Files.delete(Paths.get("src/dbs/data/chunks.old.data"));
-			File old_chunks = new File("src/dbs/data/chunks.data");
-			old_chunks.renameTo(new File("src/dbs/data/chunks.old.data"));
-			File new_chunks = new File("src/dbs/data/chunks.new.data");
-			new_chunks.renameTo(new File("src/dbs/data/chunks.data"));
-		}
-		catch (IOException e) {
-			// What should we do?
-		}
+		new File("src/dbs/peer/metadata/chunks.old").delete();
+		new File("src/dbs/peer/metadata/chunks").renameTo(new File("src/dbs/peer/metadata/chunks.old"));
+		new File("src/dbs/peer/metadata/chunks.new").renameTo(new File("src/dbs/peer/metadata/chunks"));
 
 		System.out.println("\nPeer terminated");
 	}
@@ -197,25 +184,25 @@ public class Peer implements PeerInterface {
 		return "";
 	}
 
-	public RMIResult backup(String filename, String fileID, byte[] file, int replication_degree) {
+	public RemoteFunction backup(String filename, String fileID, byte[] file, int replication_degree) {
 		return PeerProtocol.backup(this, filename, fileID, file, replication_degree);
 	}
 
-	public RMIResult restore(String pathname) {
+	public RemoteFunction restore(String pathname) {
 		return PeerProtocol.restore(this, pathname);
 	}
 
-	public RMIResult delete(String pathname) {
+	public RemoteFunction delete(String pathname) {
 		return PeerProtocol.delete(this, pathname);
 	}
 
-	public RMIResult reclaim(int disk_space) {
+	public RemoteFunction reclaim(int disk_space) {
 		return PeerProtocol.reclaim(this, disk_space);
 	}
 
-	/****************************************************************************************************
-	 *** Constructor ************************************************************************************
-	 ****************************************************************************************************/
+	/***************************************************************************************************
+	***** Constructor **********************************************************************************
+	***************************************************************************************************/
 
 	public Peer(String protocol_version, int id, String access_point,
 	            String MC_address, int MC_port,
@@ -224,7 +211,7 @@ public class Peer implements PeerInterface {
 		System.out.println("\nInitializing peer...");
 
 		/* Single-comment this line to switch to Cool-Mode
-		NetworkInterface net_int = PeerUtility.mainInterface();
+		NetworkInterface net_int = MainInterface.find();
 		if (net_int != null) {
 			byte[] hw_addr = net_int.getHardwareAddress();
 			this.ID = String.format("%02x%02x%02x%02x%02x%02x@",
@@ -246,19 +233,15 @@ public class Peer implements PeerInterface {
 		processes = new AtomicInteger(0);
 		running = new AtomicBoolean(true);
 
-		generator = new Random(ProcessHandle.current().pid());
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
-		try (FileInputStream files_stream = new FileInputStream("src/dbs/data/files.data");
-		     FileInputStream chunks_stream = new FileInputStream("src/dbs/data/chunks.data")) {
+		try (FileInputStream files_stream = new FileInputStream("src/dbs/peer/metadata/files");
+		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
+		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
+		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
 
-			ObjectInputStream objectstream = new ObjectInputStream(files_stream);
-			stored_files = /*new Hashtable<>();*/ (Hashtable<String, String>) objectstream.readObject();
-			objectstream.close();
-
-			objectstream = new ObjectInputStream(chunks_stream);
-			stored_chunks = /*new Hashtable<>();*/ (Hashtable<String, String>) objectstream.readObject();
-			objectstream.close();
+			stored_files = (Hashtable<String, String>) files_object_stream.readObject();
+			stored_chunks = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
 		}
 		catch (IOException | ClassNotFoundException e) {
 			// What should we do?
@@ -274,9 +257,9 @@ public class Peer implements PeerInterface {
 		MDBChannel = new PeerChannel(this, MDBSocket);
 		MDRChannel = new PeerChannel(this, MDRSocket);
 
-		MCQueue = new PeerDispatcher(this, MCChannel.queue());
-		MDBQueue = new PeerDispatcher(this, MDBChannel.queue());
-		MDRQueue = new PeerDispatcher(this, MDRChannel.queue());
+		MCQueue = new PeerQueue(this, MCChannel);
+		MDBQueue = new PeerQueue(this, MDBChannel);
+		MDRQueue = new PeerQueue(this, MDRChannel);
 
 		executor.execute(MCChannel);
 		executor.execute(MDBChannel);

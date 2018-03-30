@@ -1,4 +1,4 @@
-package dbs;
+package dbs.peer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -7,6 +7,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.regex.Pattern;
 
 // Collection of utilities used throughout our code
 public class PeerUtility {
@@ -47,13 +48,8 @@ public class PeerUtility {
     }
 
 	public static class ProtocolVersion {
-		public final int MAJOR_NUMBER;
-		public final int MINOR_NUMBER;
-
-		public ProtocolVersion(int major_number, int minor_number) {
-			MAJOR_NUMBER = major_number;
-			MINOR_NUMBER = minor_number;
-		}
+		public final Integer MAJOR_NUMBER;
+		public final Integer MINOR_NUMBER;
 
 		public ProtocolVersion(String version) {
 			MAJOR_NUMBER = Character.getNumericValue(version.charAt(0));
@@ -92,8 +88,8 @@ public class PeerUtility {
                           "S" + filemetadata.size() +
                           "C" + filemetadata.creationTime() +
                           "M" + filemetadata.lastModifiedTime() +
-                          "A" + filemetadata.lastAccessTime() +
-                          "B" + Instant.now();
+                          "A" + filemetadata.lastAccessTime(); /* +
+                          "B" + Instant.now(); // Is this allowed by their spec? */
 
         byte[] hash = SHA_256_HASHER.digest(filename.getBytes());
 
@@ -103,6 +99,6 @@ public class PeerUtility {
             hash_string.append(String.format("%02x", hash_byte));
         }
 
-        return hash_string.toString();
+        return hash_string.toString().toUpperCase();
     }
 }

@@ -1,13 +1,16 @@
-package dbs;
+package dbs.peer;
 
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import dbs.PeerUtility.MessageType;
-import rmi.RMIResult;
-import util.GenericArrays;
-import util.concurrent.LinkedTransientQueue;
+import dbs.peer.PeerUtility.MessageType;
+import dbs.peer.PeerUtility.ProtocolVersion;
+import dbs.rmi.RemoteFunction;
+import dbs.util.GenericArrays;
+import dbs.util.concurrent.LinkedTransientQueue;
 
 public class PeerProtocol implements Runnable {
 	private Peer peer;
@@ -18,6 +21,7 @@ public class PeerProtocol implements Runnable {
 		if (peer.processes.getAndIncrement() < 0) {
 			return;
 		}
+
 		this.peer = peer;
 		String header = new String(message).split("\r\n\r\n", 2)[0];
 		this.header = header.split("[ ]+");
@@ -27,36 +31,40 @@ public class PeerProtocol implements Runnable {
 
 	@Override
 	public void run() {
-		if (peer != null) {
-			switch (header[0].toUpperCase()) {
-				case "PUTCHUNK":
-					backup();
-					break;
-				case "GETCHUNK":
-					restore();
-					break;
-				case "DELETE":
-					delete();
-					break;
-				case "REMOVED":
-					reclaim();
-					break;
-			}
+		if (peer == null) {
+			peer.processes.decrementAndGet();
+			return;
 		}
+
+		switch (header[0].toUpperCase()) {
+			case "PUTCHUNK":
+				backup();
+				break;
+			case "GETCHUNK":
+				restore();
+				break;
+			case "DELETE":
+				delete();
+				break;
+			case "REMOVED":
+				reclaim();
+				break;
+		}
+
 		peer.processes.decrementAndGet();
 	}
 
-	public static RMIResult backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
+	public static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
 		if (peer.processes.getAndIncrement() < 0) {
 			peer.processes.decrementAndGet();
-			return new RMIResult<>((args) -> {
+			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Peer process terminating...");
 				return 1;
 			});
 		}
 		if (peer.DBMessages.containsKey(fileID)) {
 			peer.processes.decrementAndGet();
-			return new RMIResult<>((args) -> {
+			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Instance of BACKUP protocol for this fileID already exists" +
 				                   "\nBACKUP protocol terminating...");
 				return 2;
@@ -65,7 +73,7 @@ public class PeerProtocol implements Runnable {
 
 		if (file.length == 0 || file.length > PeerUtility.MAXIMUM_FILE_SIZE) {
 			peer.processes.decrementAndGet();
-			return new RMIResult<>((args) -> {
+			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! File must be greater than 0 bytes and less than 64 gigabytes" +
 				                   "\nBACKUP protocol terminating...");
 				return 11;
@@ -73,10 +81,18 @@ public class PeerProtocol implements Runnable {
 		}
 		if (replication_degree < 1 || replication_degree > 9) {
 			peer.processes.decrementAndGet();
-			return new RMIResult<>((args) -> {
+			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Replication degree must be greater than 0 and less than 10" +
 				                   "\nBACKUP protocol terminating...");
 				return 12;
+			});
+		}
+		if (peer.stored_files.containsKey(filename) || peer.stored_chunks.containsKey(fileID)) {
+			peer.processes.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nERROR! File already exists in the service" +
+				                   "\nBACKUP protocol terminating...");
+				return 13;
 			});
 		}
 
@@ -85,11 +101,8 @@ public class PeerProtocol implements Runnable {
 		LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
 		peer.DBMessages.put(fileID, replies);
 
-		String old_fileID = peer.stored_files.put(filename, fileID);
-		if (old_fileID != null) {
-			peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(
-					MessageType.DELETE, peer.PROTOCOL_VERSION, peer.ID, old_fileID, null, null)));
-		}
+		peer.stored_files.put(filename, fileID);
+		peer.stored_chunks.put(fileID, new AtomicInteger(0));
 
 		int chunk_count = 0;
 		int chunk_amount = file.length / PeerUtility.MAXIMUM_CHUNK_SIZE + 1;
@@ -128,10 +141,14 @@ public class PeerProtocol implements Runnable {
 		} while (++chunk_count < chunk_amount && stored != 0);
 
 		if (stored == 0) {
-			old_fileID = peer.stored_files.remove(filename);
+			String failed_fileID = peer.stored_files.remove(filename);
+			peer.stored_chunks.remove(failed_fileID);
+
 			if (chunk_count != 1) {
 				peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(
-						MessageType.DELETE, peer.PROTOCOL_VERSION, peer.ID, old_fileID, null, null)));
+						MessageType.DELETE, peer.PROTOCOL_VERSION,
+						peer.ID, failed_fileID,
+						null, null)));
 			}
 		}
 
@@ -140,10 +157,10 @@ public class PeerProtocol implements Runnable {
 		peer.processes.decrementAndGet();
 
 		return (stored != 0 ?
-		        new RMIResult<>((args) -> {
+		        new RemoteFunction<>((args) -> {
 			        return 0;
 		        }) :
-		        new RMIResult<>((args) -> {
+		        new RemoteFunction<>((args) -> {
 			        System.err.println("\nERROR! Chunk " + args[0] + " could not be stored" +
 			                           "\nBACKUP protocol terminating...");
 			        return 21;
@@ -151,12 +168,42 @@ public class PeerProtocol implements Runnable {
 	}
 
 	public void backup() {
-		// TODO
+		File file = new File("src/dbs/peer/data/" + header[3].toUpperCase() + "." + header[4]);
+
+		try {
+			if (!file.createNewFile()) {
+				// File already exists; can't risk corrupting existing files
+				System.err.println("\nERROR! File already exists" +
+				                   "\nBACKUP protocol terminating...");
+				return;
+			}
+		}
+		catch (IOException e) {
+			// Something else went wrong; again, can't risk corrupting existing files
+			System.err.println("\nERROR! File creation failed" +
+			                   "\nBACKUP protocol terminating...");
+			return;
+		}
+
+		try (FileOutputStream file_stream = new FileOutputStream(file)) {
+			file_stream.write(body);
+
+			int duration = ThreadLocalRandom.current().nextInt(401);
+			TimeUnit.MILLISECONDS.sleep(duration);
+
+			byte[] message = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+			                                                    peer.ID, header[3],
+			                                                    Integer.valueOf(header[4]), null);
+			peer.MCSocket.send(message);
+		}
+		catch (IOException | InterruptedException e) {
+			// Shouldn't happen
+		}
 	}
 
-	public static RMIResult restore(Peer peer, String pathname) {
+	public static RemoteFunction restore(Peer peer, String pathname) {
 		// TODO
-		return new RMIResult<>((args) -> {
+		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
@@ -165,9 +212,9 @@ public class PeerProtocol implements Runnable {
 		// TODO
 	}
 
-	public static RMIResult delete(Peer peer, String pathname) {
+	public static RemoteFunction delete(Peer peer, String pathname) {
 		// TODO
-		return new RMIResult<>((args) -> {
+		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
@@ -176,9 +223,9 @@ public class PeerProtocol implements Runnable {
 		// TODO
 	}
 
-	public static RMIResult reclaim(Peer peer, int disk_space) {
+	public static RemoteFunction reclaim(Peer peer, int disk_space) {
 		// TODO
-		return new RMIResult<>((args) -> {
+		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}

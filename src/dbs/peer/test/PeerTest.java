@@ -1,4 +1,4 @@
-package dbs.test;
+package dbs.peer.test;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -7,9 +7,9 @@ import java.nio.file.Paths;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 
-import dbs.PeerInterface;
-import dbs.PeerUtility;
-import rmi.RMIResult;
+import dbs.peer.PeerInterface;
+import dbs.peer.PeerUtility;
+import dbs.rmi.RemoteFunction;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
@@ -50,19 +50,19 @@ public class PeerTest {
                 byte[] file = Files.readAllBytes(filepath);
 
                 @SuppressWarnings("unchecked")
-				Integer backup = ((RMIResult<Integer>) peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]))).call();
+				Integer backup = ((RemoteFunction<Integer>) peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]))).call();
 				System.exit(backup);
 			case "RESTORE":
 				@SuppressWarnings("unchecked")
-				Integer restore = ((RMIResult<Integer>) peer_interface.restore(args[2])).call();
+				Integer restore = ((RemoteFunction<Integer>) peer_interface.restore(args[2])).call();
 				System.exit(restore);
 			case "DELETE":
 				@SuppressWarnings("unchecked")
-				Integer delete = ((RMIResult<Integer>) peer_interface.delete(args[2])).call();
+				Integer delete = ((RemoteFunction<Integer>) peer_interface.delete(args[2])).call();
 				System.exit(delete);
 			case "RECLAIM":
 				@SuppressWarnings("unchecked")
-				Integer reclaim = ((RMIResult<Integer>) peer_interface.reclaim(Integer.valueOf(args[2]))).call();
+				Integer reclaim = ((RemoteFunction<Integer>) peer_interface.reclaim(Integer.valueOf(args[2]))).call();
 				System.exit(reclaim);
 			case "STATE":
 				String state = peer_interface.state();

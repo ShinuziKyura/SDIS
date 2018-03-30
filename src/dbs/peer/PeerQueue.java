@@ -1,14 +1,20 @@
-package dbs;
+package dbs.peer;
 
 import java.util.concurrent.LinkedTransferQueue;
 
-public class PeerDispatcher implements Runnable {
+public class PeerQueue implements Runnable {
     private Peer peer;
     private LinkedTransferQueue<byte[]> queue;
 
-    public PeerDispatcher(Peer peer, LinkedTransferQueue<byte[]> queue) {
+    public static final class ChannelQueue {
+		private ChannelQueue() {
+		}
+    }
+	private static final ChannelQueue check = new ChannelQueue();
+
+    public PeerQueue(Peer peer, PeerChannel channel) {
         this.peer = peer;
-        this.queue = queue;
+        this.queue = channel.queue(check);
     }
 
     @Override
@@ -27,6 +33,9 @@ public class PeerDispatcher implements Runnable {
                         case "STORED": // MC
                             if (peer.DBMessages.containsKey(message_header[3])) {
                                 peer.DBMessages.get(message_header[3]).put(buffer);
+                            }
+                            if (peer.stored_chunks.containsKey(message_header[3])) {
+                                peer.stored_chunks.get(message_header[3]).incrementAndGet();
                             }
                             break;
                         case "GETCHUNK": // MC
