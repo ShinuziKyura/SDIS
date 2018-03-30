@@ -1,6 +1,10 @@
 package dbs.peer.test;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -73,5 +77,20 @@ public class PeerTest {
 				break;
 		}
 		//*/
+		
+		//writeFile("64001B.txt", 64001);
+	}
+	
+	
+	static void writeFile(String s, int size) throws IOException {
+		File file = new File(s);
+        FileOutputStream os = new FileOutputStream(file);
+        OutputStreamWriter osw = new OutputStreamWriter(os);  
+        
+		for(int i=0; i < size; i++) {
+			osw.write(""+i % 10);
+		}
+		
+		osw.close();
 	}
 }

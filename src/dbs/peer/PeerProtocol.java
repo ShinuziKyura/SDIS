@@ -25,7 +25,7 @@ public class PeerProtocol implements Runnable {
 		this.peer = peer;
 		String header = new String(message).split("\r\n\r\n", 2)[0];
 		this.header = header.split("[ ]+");
-		byte[] body = GenericArrays.split(message, header.length())[1];
+		byte[] body = GenericArrays.split(message, header.getBytes().length)[1];
 		this.body = body.length > 4 ? java.util.Arrays.copyOfRange(body, 4, body.length) : null;
 	}
 
@@ -223,8 +223,67 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	public static RemoteFunction restore(Peer peer, String pathname) {
+	public static RemoteFunction restore(Peer peer, String filename) {
 		// TODO
+		if (peer.instances.getAndIncrement() < 0) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nERROR! Peer process terminating...");
+				return 1;
+			});
+		}
+		if (!peer.stored_files.containsKey(filename)) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nERROR! The file you are trying to restore was not backed up by this peer!" +
+						"\nRESTORE protocol terminating...");
+				return 2;
+			});
+		}
+		
+		String fileID = peer.stored_files.get(filename);
+		
+		int chunk_number=0;
+		byte[] chunk=null;
+		byte[] chunk_body=null;
+		
+		LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
+		peer.DR_messages.put(fileID, replies);
+		
+		//works the same way as backup but it is supposed to be TCP
+		do {
+			byte[] chunk_request = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
+																								peer.ID, fileID,
+																								chunk_number, null);
+			int requests = 0;
+			
+			while (requests < 5) {
+				try {
+					peer.MCSocket.send(chunk_request);
+				}
+				catch (IOException e) {
+					// Shouldn't happen
+				}
+
+				replies.init((1 << requests++), TimeUnit.SECONDS);
+				while ((chunk = replies.take()) != null) {
+					String[] header = new String(chunk).split("\r\n\r\n", 2)[0].split("[ ]+");
+					if (header[3].toUpperCase().equals(fileID) && Integer.parseInt(header[4])==chunk_number) {
+						
+						chunk_body = GenericArrays.split(chunk, new String(chunk).split("\r\n\r\n", 2)[0].getBytes().length)[1];
+						chunk_body = chunk_body.length > 4 ? java.util.Arrays.copyOfRange(chunk_body, 4, chunk_body.length) : null;
+						
+						//create file
+						
+						System.out.println("received chunk number "+ chunk_number);
+					}
+				}
+			}
+		
+		}while(chunk_body != null && chunk_body.length == PeerUtility.MAXIMUM_CHUNK_SIZE);
+
+
+
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
