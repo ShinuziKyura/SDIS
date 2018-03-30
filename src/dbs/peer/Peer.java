@@ -6,8 +6,6 @@ import java.io.FileInputStream;
 import java.io.ObjectInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -87,7 +85,7 @@ public class Peer implements PeerInterface {
 	Hashtable<String, String> stored_files;
 	Hashtable<String, AtomicInteger> stored_chunks;
 
-	Hashtable<String, LinkedTransientQueue<byte[]>> DBMessages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> DB_messages;
 
 	MulticastChannel MCSocket;  // multicast control
 	MulticastChannel MDBSocket; // multicast metadata backup
@@ -247,7 +245,7 @@ public class Peer implements PeerInterface {
 			// What should we do?
 		}
 
-		DBMessages = new Hashtable<>();
+		DB_messages = new Hashtable<>();
 
 		MCSocket = new MulticastChannel(MC_address, MC_port);
 		MDBSocket = new MulticastChannel(MDB_address, MDB_port);

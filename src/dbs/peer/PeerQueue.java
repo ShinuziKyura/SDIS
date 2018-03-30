@@ -1,6 +1,9 @@
 package dbs.peer;
 
+import dbs.util.concurrent.LinkedTransientQueue;
+
 import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PeerQueue implements Runnable {
     private Peer peer;
@@ -26,17 +29,27 @@ public class PeerQueue implements Runnable {
                 if (!message_header[2].equals(peer.ID)) {
                     switch(message_header[0].toUpperCase()) {
                         case "PUTCHUNK": // MDB
-                            if (!peer.DBMessages.containsKey(message_header[3])) {
-                                peer.executor.execute(new PeerProtocol(peer, buffer));
-                            }
+	                        // Received PUTCHUNK from another Peer: Initiate protocol to backup chunk
+	                        peer.executor.execute(new PeerProtocol(peer, buffer));
                             break;
                         case "STORED": // MC
-                            if (peer.DBMessages.containsKey(message_header[3])) {
-                                peer.DBMessages.get(message_header[3]).put(buffer);
-                            }
-                            if (peer.stored_chunks.containsKey(message_header[3])) {
-                                peer.stored_chunks.get(message_header[3]).incrementAndGet();
-                            }
+	                        // Received STORED from another Peer:
+	                        // A backup protocol may be running: forward messages to that protocol
+	                        if (peer.DB_messages.containsKey(message_header[3].toUpperCase())) {
+	                        	try {
+			                        peer.DB_messages.get(message_header[3].toUpperCase()).put(buffer);
+		                        }
+		                        catch (NullPointerException e) {
+		                        }
+	                        }
+	                        // The chunk may exist on our filesystem: increase count of chunks
+	                        if (peer.stored_chunks.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+	                        	try {
+			                        peer.stored_chunks.get(message_header[3].toUpperCase() + "." + message_header[4]).incrementAndGet();
+		                        }
+		                        catch (NullPointerException e) {
+		                        }
+	                        }
                             break;
                         case "GETCHUNK": // MC
 
@@ -48,8 +61,9 @@ public class PeerQueue implements Runnable {
 
                             break;
                         case "REMOVED": // MC
-
                             break;
+	                    case "STOP":
+	                    	break;
                     }
                 }
             }

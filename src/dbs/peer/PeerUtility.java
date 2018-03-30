@@ -88,8 +88,8 @@ public class PeerUtility {
                           "S" + filemetadata.size() +
                           "C" + filemetadata.creationTime() +
                           "M" + filemetadata.lastModifiedTime() +
-                          "A" + filemetadata.lastAccessTime(); /* +
-                          "B" + Instant.now(); // Is this allowed by their spec? */
+                          "A" + filemetadata.lastAccessTime();
+
 
         byte[] hash = SHA_256_HASHER.digest(filename.getBytes());
 

@@ -8,6 +8,7 @@ public class LinkedTransientQueue<E> extends LinkedTransferQueue<E> {
 	private volatile long duration = 0;
 
 	public void init(long duration, TimeUnit unit) {
+		super.clear();
 		switch (unit) {
 			case DAYS:
 				duration *= 24;
@@ -45,6 +46,7 @@ public class LinkedTransientQueue<E> extends LinkedTransferQueue<E> {
 			    e = super.poll(poll_duration, TimeUnit.NANOSECONDS);
 		    }
 		    catch (InterruptedException ee) {
+            	return null;
 		    }
 	    }
         return e;

@@ -2,12 +2,12 @@ package dbs.peer;
 
 import java.io.*;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import dbs.peer.PeerUtility.MessageType;
-import dbs.peer.PeerUtility.ProtocolVersion;
 import dbs.rmi.RemoteFunction;
 import dbs.util.GenericArrays;
 import dbs.util.concurrent.LinkedTransientQueue;
@@ -62,7 +62,7 @@ public class PeerProtocol implements Runnable {
 				return 1;
 			});
 		}
-		if (peer.DBMessages.containsKey(fileID)) {
+		if (peer.DB_messages.containsKey(fileID)) {
 			peer.processes.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Instance of BACKUP protocol for this fileID already exists" +
@@ -99,14 +99,16 @@ public class PeerProtocol implements Runnable {
 		int stored;
 		int requests;
 		LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
-		peer.DBMessages.put(fileID, replies);
+		peer.DB_messages.put(fileID, replies);
 
 		peer.stored_files.put(filename, fileID);
-		peer.stored_chunks.put(fileID, new AtomicInteger(0));
 
 		int chunk_count = 0;
 		int chunk_amount = file.length / PeerUtility.MAXIMUM_CHUNK_SIZE + 1;
 		do {
+			HashSet<String> stored_peers = new HashSet<>();
+
+			String chunk_name = fileID + "." + chunk_count;
 			int chunk_size = (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE < file.length ?
 			                 (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE :
 			                 file.length;
@@ -116,9 +118,12 @@ public class PeerProtocol implements Runnable {
 			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * PeerUtility.MAXIMUM_CHUNK_SIZE, chunk_size);
 			byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
 
+			peer.stored_chunks.put(chunk_name, new AtomicInteger(0));
+
 			stored = 0;
 			requests = 0;
 			while (stored < replication_degree && requests < 5) {
+				byte[] message;
 				try {
 					peer.MDBSocket.send(chunk);
 				}
@@ -126,10 +131,14 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-			//	replies.init((1 << requests++), TimeUnit.SECONDS);
+				//	replies.init((1 << requests++), TimeUnit.SECONDS);
 				replies.init(1 + requests++, TimeUnit.MILLISECONDS); // DEBUG
-				while (replies.take() != null) {
-					++stored;
+				while ((message = replies.take()) != null) {
+					String[] header = new String(message).split("[ ]+");
+					if (!stored_peers.contains(header[2]) && chunk_name.equals(header[3].toUpperCase() + "." + header[4])) {
+						stored_peers.add(header[2]);
+						++stored;
+					}
 				}
 			}
 
@@ -142,7 +151,9 @@ public class PeerProtocol implements Runnable {
 
 		if (stored == 0) {
 			String failed_fileID = peer.stored_files.remove(filename);
-			peer.stored_chunks.remove(failed_fileID);
+			while (--chunk_count >= 0) {
+				peer.stored_chunks.remove(failed_fileID + "." + chunk_count);
+			}
 
 			if (chunk_count != 1) {
 				peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(
@@ -152,7 +163,7 @@ public class PeerProtocol implements Runnable {
 			}
 		}
 
-		peer.DBMessages.remove(fileID);
+		peer.DB_messages.remove(fileID);
 
 		peer.processes.decrementAndGet();
 
@@ -168,31 +179,40 @@ public class PeerProtocol implements Runnable {
 	}
 
 	public void backup() {
-		File file = new File("src/dbs/peer/data/" + header[3].toUpperCase() + "." + header[4]);
+		String filename = header[3].toUpperCase() + "." + header[4];
+		if (!peer.stored_chunks.containsKey(filename)) {
+			File file = new File("src/dbs/peer/data/" + filename);
 
-		try {
-			if (!file.createNewFile()) {
-				// File already exists; can't risk corrupting existing files
-				System.err.println("\nERROR! File already exists" +
+			try {
+				if (!file.createNewFile()) {
+					// File already exists; can't risk corrupting existing files
+					System.err.println("\nERROR! File already exists" +
+					                   "\nBACKUP protocol terminating...");
+					return;
+				}
+			}
+			catch (IOException e) {
+				// Something else went wrong; again, can't risk corrupting existing files
+				System.err.println("\nERROR! File creation failed" +
 				                   "\nBACKUP protocol terminating...");
 				return;
 			}
-		}
-		catch (IOException e) {
-			// Something else went wrong; again, can't risk corrupting existing files
-			System.err.println("\nERROR! File creation failed" +
-			                   "\nBACKUP protocol terminating...");
-			return;
+
+			try (FileOutputStream file_stream = new FileOutputStream(file)) {
+				file_stream.write(body);
+			}
+			catch (IOException e) {
+			}
+
+			peer.stored_chunks.put(filename, new AtomicInteger(1));
 		}
 
-		try (FileOutputStream file_stream = new FileOutputStream(file)) {
-			file_stream.write(body);
-
+		try {
 			int duration = ThreadLocalRandom.current().nextInt(401);
 			TimeUnit.MILLISECONDS.sleep(duration);
 
 			byte[] message = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
-			                                                    peer.ID, header[3],
+			                                                    peer.ID, header[3].toUpperCase(),
 			                                                    Integer.valueOf(header[4]), null);
 			peer.MCSocket.send(message);
 		}
