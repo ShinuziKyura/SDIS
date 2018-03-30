@@ -147,7 +147,6 @@ public class Peer implements PeerInterface {
 		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/peer/metadata/chunks.new");
 		     ObjectOutputStream files_object_stream = new ObjectOutputStream(files_stream);
 		     ObjectOutputStream chunks_object_stream = new ObjectOutputStream(chunks_stream)) {
-
 			files_object_stream.writeObject(stored_files);
 			chunks_object_stream.writeObject(stored_chunks);
 		}
@@ -234,7 +233,6 @@ public class Peer implements PeerInterface {
 		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
 		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
 		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
-
 			stored_files = (Hashtable<String, String>) files_object_stream.readObject();
 			stored_chunks = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
 		}

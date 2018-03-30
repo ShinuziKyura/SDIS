@@ -26,7 +26,11 @@ public class PeerProtocol implements Runnable {
 		String header = new String(message).split("\r\n\r\n", 2)[0];
 		this.header = header.split("[ ]+");
 		byte[] body = GenericArrays.split(message, header.getBytes().length)[1];
+<<<<<<< HEAD
 		this.body = body.length > 4 ? java.util.Arrays.copyOfRange(body, 4, body.length) : null;
+=======
+		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : null;
+>>>>>>> refs/remotes/origin/master
 	}
 
 	@Override
