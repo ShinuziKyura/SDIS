@@ -11,8 +11,8 @@ public class DatagramChannel {
 	protected DatagramPacket packet;
 	protected DatagramSocket socket;
 
-//	protected static final String EOM = "@EOM"; // Needs adjustment
-	protected static final int BUFFER_SIZE = 65536;
+//	protected static final String EOM = "@EOM"; // Actually we require some form of byte stuffing
+	public static final int BUFFER_SIZE = 65536; // Public for now
 
 	protected DatagramChannel() {
 	}
@@ -22,7 +22,7 @@ public class DatagramChannel {
 		this.socket = new DatagramSocket(port);
 	}
 	
-/*	public void send(String message, String address, int port) throws IOException {
+/*	public void send(String message, String address, int port) throws IOException { // Probably better to receive byte[]
 		int packet_amount = (message.length() - 1) / BUFFER_SIZE + 1;
 		
 		String message_part = "";
@@ -46,7 +46,9 @@ public class DatagramChannel {
 		this.socket.send(this.packet);
 	}
 	
-/*	public String receive() throws IOException {
+/*	public String receive() throws IOException { // Probably better to return byte[]
+		this.buffer = new byte[BUFFER_SIZE];
+
 		this.packet = new DatagramPacket(this.buffer, BUFFER_SIZE);
 		
 		String message = "";

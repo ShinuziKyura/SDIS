@@ -1,6 +1,8 @@
 package dbs;
 
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -8,18 +10,23 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.*;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.Random;
+import java.util.Hashtable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
-import dbs.util.PeerUtility;
+import rmi.RMIResult;
 import net.MulticastChannel;
-import util.concurrent.LinkedTemporaryQueue;
+import util.GenericArrays;
+import util.concurrent.LinkedTransientQueue;
 
-import static dbs.util.PeerUtility.*;
+import static dbs.PeerUtility.*;
 
 public class Peer implements PeerInterface {
 	/*
@@ -45,30 +52,16 @@ public class Peer implements PeerInterface {
 			System.exit(1);
 		}
 
-		Peer peer = Peer.initialize(args[0], Integer.valueOf(args[1]), args[2],
-		                            args[3], Integer.valueOf(args[4]),
-		                            args[5], Integer.valueOf(args[6]),
-		                            args[7], Integer.valueOf(args[8]));
-	/*	Peer peer = Peer.initialize("1.0", 1,"DBS_TEST",
+		Peer peer = new Peer(args[0], Integer.valueOf(args[1]), args[2],
+		                     args[3], Integer.valueOf(args[4]),
+		                     args[5], Integer.valueOf(args[6]),
+		                     args[7], Integer.valueOf(args[8]));
+	/*	Peer peer = new Peer("1.0", 1,"DBS_TEST",
 							 "225.0.0.0", 8000,
 							 "225.0.0.0", 8001,
 							 "225.0.0.0", 8002); */
 
 		peer.run();
-		peer.terminate();
-	}
-
-	private static Peer instance = null;
-
-	public static Peer initialize(String protocol_version, int id, String access_point,
-	                              String MC_address, int MC_port,
-	                              String MDB_address, int MDB_port,
-	                              String MDR_address, int MDR_port) throws PeerException, IOException {
-		if (instance != null) {
-			instance = new Peer(protocol_version, id, access_point,
-			                    MC_address, MC_port, MDB_address, MDB_port, MDR_address, MDR_port);
-		}
-		return instance;
 	}
 
 	/*
@@ -81,7 +74,7 @@ public class Peer implements PeerInterface {
 		Member constants
 	 */
 	final String ID;
-	final Version PROTOCOL_VERSION;
+	final ProtocolVersion PROTOCOL_VERSION;
 	final String ACCESS_POINT;
 
 	/*
@@ -96,7 +89,7 @@ public class Peer implements PeerInterface {
 	Hashtable<String, String> stored_files; // Read from file
 	Hashtable<String, String> stored_chunks;
 
-	Hashtable<String, LinkedTemporaryQueue<byte[]>> DBReplies; // Name subject to change
+	Hashtable<String, LinkedTransientQueue<byte[]>> DBMessages;
 
 	MulticastChannel MCSocket;  // multicast control
 	MulticastChannel MDBSocket; // multicast data backup
@@ -113,14 +106,14 @@ public class Peer implements PeerInterface {
 	/*
 		Constructor
 	 */
-	private Peer(String protocol_version, int id, String access_point,
+	public Peer(String protocol_version, int id, String access_point,
 				String MC_address, int MC_port,
 				String MDB_address, int MDB_port,
 				String MDR_address, int MDR_port) throws PeerException, IOException {
 		System.out.println("\nInitializing peer...");
 
 		/* Single-comment this line to switch to Cool-Mode
-		NetworkInterface net_int = PeerUtility.testInterfaces();
+		NetworkInterface net_int = PeerUtility.mainInterface();
 		if (net_int != null) {
 			byte[] hw_addr = net_int.getHardwareAddress();
 			this.ID = String.format("%02x%02x%02x%02x%02x%02x@",
@@ -136,21 +129,31 @@ public class Peer implements PeerInterface {
 		this.ID = Integer.toString(id);
 		//*/
 
-		PROTOCOL_VERSION = new PeerUtility.Version(protocol_version);
+		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
 		ACCESS_POINT = access_point;
 
 		processes = new AtomicInteger(0);
-		running = new AtomicBoolean(false);
+		running = new AtomicBoolean(true);
 
 		generator = new Random(ProcessHandle.current().pid());
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
-		stored_files = new Hashtable<>();
-		stored_chunks = new Hashtable<>();
+		try (FileInputStream files_stream = new FileInputStream("src/dbs/data/files.data");
+		     FileInputStream chunks_stream = new FileInputStream("src/dbs/data/chunks.data")) {
 
-		// load data from files
+			ObjectInputStream objectstream = new ObjectInputStream(files_stream);
+			stored_files = (Hashtable<String, String>) objectstream.readObject();
+			objectstream.close();
 
-		DBReplies = new Hashtable<>();
+			objectstream = new ObjectInputStream(chunks_stream);
+			stored_chunks = (Hashtable<String, String>) objectstream.readObject();
+			objectstream.close();
+		}
+		catch (IOException | ClassNotFoundException e) {
+			// What should we do?
+		}
+
+		DBMessages = new Hashtable<>();
 
 		MCSocket = new MulticastChannel(MC_address, MC_port);
 		MDBSocket = new MulticastChannel(MDB_address, MDB_port);
@@ -163,6 +166,14 @@ public class Peer implements PeerInterface {
 		MCQueue = new PeerQueue(this, MCChannel.queue());
 		MDBQueue = new PeerQueue(this, MDBChannel.queue());
 		MDRQueue = new PeerQueue(this, MDRChannel.queue());
+
+		executor.execute(MCChannel);
+		executor.execute(MDBChannel);
+		executor.execute(MDRChannel);
+
+		executor.execute(MCQueue);
+		executor.execute(MDBQueue);
+		executor.execute(MDRQueue);
 
 		try {
 			try {
@@ -181,24 +192,13 @@ public class Peer implements PeerInterface {
 
 		System.out.println("\nPeer initialized with ID: " + ID +
 		                   "\n\tProtocol version: " + PROTOCOL_VERSION +
-		                   "\n\tAccess point: " + ACCESS_POINT +
-		                   "\n\nRunning: false");
+		                   "\n\tAccess point: " + ACCESS_POINT);
 	}
 
-	/*
-		Member functions
-	 */
+	/****************************************************************************************************
+	 *** Member functions *******************************************************************************
+	 ****************************************************************************************************/
 	public void run() {
-		running.set(true);
-
-		executor.execute(MCChannel);
-		executor.execute(MDBChannel);
-		executor.execute(MDRChannel);
-
-		executor.execute(MCQueue);
-		executor.execute(MDBQueue);
-		executor.execute(MDRQueue);
-
 		// This will be removed
 		synchronized (running) {
 			while (running.get()) {
@@ -209,157 +209,7 @@ public class Peer implements PeerInterface {
 				}
 			}
 		}
-	}
 
-	public int backup(String filename, String fileID, byte[] file, int replication_degree) {
-		if (processes.getAndIncrement() < 0) {
-			System.err.println("\nERROR! Peer process terminating...");
-			processes.decrementAndGet();
-			return 1;
-		}
-
-		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
-			System.err.println("\nERROR! File must be greater than 0 bytes and less than 64 gigabytes" +
-			                   "\nBACKUP protocol terminating...");
-			processes.decrementAndGet();
-			return 11;
-		}
-		if (replication_degree < 1 || replication_degree > 9) {
-			System.err.println("\nERROR! Replication degree must be greater than 0 and less than 10" +
-			                   "\nBACKUP protocol terminating...");
-			processes.decrementAndGet();
-			return 12;
-		}
-
-		String old_fileID = stored_files.put(filename, fileID);
-		if (old_fileID != null) {
-			executor.execute(new PeerProtocol(this, PeerUtility.generateProtocolHeader(
-					MessageType.DELETE, PROTOCOL_VERSION, ID, old_fileID,null, null)));
-		}
-
-		DBReplies.put(fileID, new LinkedTemporaryQueue<>());
-		LinkedTemporaryQueue<byte[]> replies = DBReplies.get(fileID);
-
-		int chunk_count = 0;
-		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
-		do {
-			int chunk_size = (chunk_count + 1) * MAXIMUM_CHUNK_SIZE < file.length ? (chunk_count + 1) * MAXIMUM_CHUNK_SIZE : file.length;
-			byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, PROTOCOL_VERSION, ID, fileID, chunk_count, replication_degree);
-			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * MAXIMUM_CHUNK_SIZE, chunk_size);
-			byte[] chunk = PeerUtility.mergeArrays(chunk_header, chunk_body);
-
-			int stored = 0;
-			int requests = 0;
-			while (stored < replication_degree && requests < 5) {
-				try {
-					MDBSocket.send(chunk);
-				}
-				catch (IOException e) {
-					// Shouldn't happen
-				}
-
-				replies.activate((1 << requests++) * 1000);
-				while (replies.poll() != null) {
-					++stored;
-				}
-			}
-			if (stored == 0) {
-				System.err.println("\nERROR! Chunk " + chunk_count + " could not be stored" +
-				                   "\nBACKUP protocol terminating...");
-				executor.execute(new PeerProtocol(this, PeerUtility.generateProtocolHeader(
-						MessageType.DELETE, PROTOCOL_VERSION, ID, stored_files.remove(filename),null, null)));
-				processes.decrementAndGet();
-				return 13;
-			}
-			if (stored < replication_degree) {
-				System.out.println("\nWARNING! Replication degree could not be met:" +
-				                   "\n\tRequested - " + replication_degree +
-				                   "\n\tActual - " + stored);
-			}
-		} while (++chunk_count < chunk_amount);
-
-		// Maybe wake up Peer thread to save hashtable to file
-
-		processes.decrementAndGet();
-
-		return 0;
-	}
-
-	public int restore(String pathname) {
-		// TODO
-		return 0;
-	}
-
-	public int delete(String pathname) {
-		// TODO
-		return 0;
-	}
-
-	public int reclaim(int disk_space) {
-		// TODO
-		return 0;
-	}
-
-	public String state() {
-		// TODO
-		return null;
-	}
-
-	public int stop() {
-		while (!processes.weakCompareAndSetPlain(0, Integer.MIN_VALUE));
-
-		running.set(false);
-
-		MCChannel.stop();
-		MDBChannel.stop();
-		MDRChannel.stop();
-
-		MCQueue.stop();
-		MDBQueue.stop();
-		MDRQueue.stop();
-
-		// This will be removed
-		synchronized (running) {
-			running.notifyAll();
-		}
-
-		return 0;
-	}
-
-	public int stop(long duration) {
-		AtomicBoolean timeout = new AtomicBoolean(false);
-		new Timer().schedule(new TimerTask() {
-			@Override
-			public void run() {
-				timeout.set(true);
-			}
-		}, duration);
-
-		while (!processes.weakCompareAndSetPlain(0, Integer.MIN_VALUE)) {
-			if (timeout.get()) {
-				return 1;
-			}
-		}
-
-		running.set(false);
-
-		MCChannel.stop();
-		MDBChannel.stop();
-		MDRChannel.stop();
-
-		MCQueue.stop();
-		MDBQueue.stop();
-		MDRQueue.stop();
-
-		// This will be removed
-		synchronized (running) {
-			running.notifyAll();
-		}
-
-		return 0;
-	}
-
-	public void terminate() {
 		System.out.println("\nTerminating peer...");
 
 		try {
@@ -378,12 +228,182 @@ public class Peer implements PeerInterface {
 			e.printStackTrace();
 		}
 
-		// save data to files
+		MCChannel.stop();
+		MDBChannel.stop();
+		MDRChannel.stop();
+
+		MCQueue.stop();
+		MDBQueue.stop();
+		MDRQueue.stop();
 
 		executor.shutdown();
 
-		System.out.println("\nPeer terminated");
+		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/data/files.new.data");
+		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/data/chunks.new.data")) {
 
-		instance = null;
+			ObjectOutputStream objectstream = new ObjectOutputStream(files_stream);
+			objectstream.writeObject(stored_files);
+			objectstream.close();
+
+			objectstream = new ObjectOutputStream(chunks_stream);
+			objectstream.writeObject(stored_chunks);
+			objectstream.close();
+		}
+		catch (IOException e) {
+			// What should we do?
+		}
+
+		try {
+			Files.delete(Paths.get("src/dbs/data/files.old.data"));
+			File old_files = new File("src/dbs/data/files.data");
+			old_files.renameTo(new File("src/dbs/data/files.old.data"));
+			File new_files = new File("src/dbs/data/files.new.data");
+			new_files.renameTo(new File("src/dbs/data/files.data"));
+
+			Files.delete(Paths.get("src/dbs/data/chunks.old.data"));
+			File old_chunks = new File("src/dbs/data/chunks.data");
+			old_chunks.renameTo(new File("src/dbs/data/chunks.old.data"));
+			File new_chunks = new File("src/dbs/data/chunks.new.data");
+			new_chunks.renameTo(new File("src/dbs/data/chunks.data"));
+		}
+		catch (IOException e) {
+			// What should we do?
+		}
+
+		System.out.println("\nPeer terminated");
+	}
+
+	public void stop() {
+		while (!processes.weakCompareAndSetPlain(0, Integer.MIN_VALUE));
+		running.set(false);
+
+		// This will be removed
+		synchronized (running) {
+			running.notifyAll();
+		}
+	}
+
+	public RMIResult backup(String filename, String fileID, byte[] file, int replication_degree) {
+		if (processes.getAndIncrement() < 0) {
+			processes.decrementAndGet();
+			return new RMIResult<>((args) -> {
+				System.err.println("\nERROR! Peer process terminating...");
+				return 1;
+			});
+		}
+		if (DBMessages.containsKey(fileID)) {
+			processes.decrementAndGet();
+			return new RMIResult<>((args) -> {
+				System.err.println("\nERROR! Instance of BACKUP protocol for this fileID already exists" +
+				                   "\nBACKUP protocol terminating...");
+				return 2;
+			});
+		}
+
+		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
+			processes.decrementAndGet();
+			return new RMIResult<>((args) -> {
+				System.err.println("\nERROR! File must be greater than 0 bytes and less than 64 gigabytes" +
+				                   "\nBACKUP protocol terminating...");
+				return 11;
+			});
+		}
+		if (replication_degree < 1 || replication_degree > 9) {
+			processes.decrementAndGet();
+			return new RMIResult<>((args) -> {
+				System.err.println("\nERROR! Replication degree must be greater than 0 and less than 10" +
+				                   "\nBACKUP protocol terminating...");
+				return 12;
+			});
+		}
+
+		int stored;
+		int requests;
+		LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
+		DBMessages.put(fileID, replies);
+
+		String old_fileID = stored_files.put(filename, fileID);
+		if (old_fileID != null) {
+			executor.execute(new PeerProtocol(this, PeerUtility.generateProtocolHeader(
+					MessageType.DELETE, PROTOCOL_VERSION, ID, old_fileID,null, null)));
+		}
+
+		int chunk_count = 0;
+		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
+		do {
+			int chunk_size = (chunk_count + 1) * MAXIMUM_CHUNK_SIZE < file.length ? (chunk_count + 1) * MAXIMUM_CHUNK_SIZE : file.length;
+			byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, PROTOCOL_VERSION, ID, fileID, chunk_count, replication_degree);
+			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * MAXIMUM_CHUNK_SIZE, chunk_size);
+			byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
+
+			stored = 0;
+			requests = 0;
+			while (stored < replication_degree && requests < 5) {
+				try {
+					MDBSocket.send(chunk);
+				}
+				catch (IOException e) {
+					// Shouldn't happen
+				}
+
+				replies.init((1 << requests++), TimeUnit.SECONDS);
+				while (replies.take() != null) {
+					++stored;
+				}
+			}
+
+			if (stored > 0 && stored < replication_degree) {
+				System.out.println("\nWARNING! Replication degree could not be met:" +
+				                   "\n\tRequested - " + replication_degree +
+				                   "\n\tActual - " + stored);
+			}
+		} while (++chunk_count < chunk_amount && stored != 0);
+
+		if (stored == 0 && chunk_count != 0) {
+			executor.execute(new PeerProtocol(this, PeerUtility.generateProtocolHeader(
+					MessageType.DELETE, PROTOCOL_VERSION, ID, stored_files.remove(filename), null, null)));
+		}
+
+		DBMessages.remove(fileID);
+
+		processes.decrementAndGet();
+
+		return (stored != 0 ?
+		        new RMIResult<>((args) -> {
+		        	return 0;
+		        }) :
+		        new RMIResult<>((args) -> {
+		        	System.err.println("\nERROR! Chunk " + args[0] + " could not be stored" +
+			                           "\nBACKUP protocol terminating...");
+		        	return 21;
+		        }, new String[]{ Integer.toString(chunk_count) }));
+	}
+
+	public RMIResult restore(String pathname) {
+		// TODO
+		return new RMIResult<>((args) -> {
+			return 0;
+		});
+	}
+
+	public RMIResult delete(String pathname) {
+		// TODO
+		return new RMIResult<>((args) -> {
+			return 0;
+		});
+	}
+
+	public RMIResult reclaim(int disk_space) {
+		// TODO
+		return new RMIResult<>((args) -> {
+			return 0;
+		});
+	}
+
+	public RMIResult state() {
+		// TODO
+		return new RMIResult<>((args) -> {
+			return 0;
+		});
 	}
 }

@@ -1,19 +1,18 @@
 package dbs;
 
-import dbs.util.PeerUtility;
-
-import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
+import util.GenericArrays;
 
 public class PeerProtocol implements Runnable {
 	private Peer peer;
-	private String[] message;
+	private String[] header;
+	private byte[] body;
 
 	public PeerProtocol(Peer peer, byte[] message) {
 		this.peer = peer;
-		this.message = new String(message).split("\r\n\r\n", 2)[0].split("[ ]+");
+		String header = new String(message).split("\r\n\r\n", 2)[0];
+		this.header = header.split("[ ]+");
+		byte[] body = GenericArrays.split(message, header.length())[1];
+		this.body = body.length > 4 ? java.util.Arrays.copyOfRange(body, 4, body.length) : null;
 	}
 
 	@Override
@@ -23,17 +22,11 @@ public class PeerProtocol implements Runnable {
 			return;
 		}
 
-		switch(message[0].toUpperCase()) {
+		switch(header[0].toUpperCase()) {
 			case "PUTCHUNK":
-
-				break;
-			case "STORED":
-
+				backup();
 				break;
 			case "GETCHUNK":
-
-				break;
-			case "CHUNK":
 
 				break;
 			case "DELETE":
@@ -45,5 +38,9 @@ public class PeerProtocol implements Runnable {
 		}
 
 		peer.processes.decrementAndGet();
+	}
+
+	public void backup() {
+
 	}
 }

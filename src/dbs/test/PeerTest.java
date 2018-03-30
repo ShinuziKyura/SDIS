@@ -1,14 +1,16 @@
 package dbs.test;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
+import java.util.Hashtable;
 
 import dbs.PeerInterface;
-import dbs.util.PeerUtility;
+import dbs.PeerUtility;
+import rmi.RMIResult;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
@@ -38,7 +40,9 @@ public class PeerTest {
             System.exit(1);
         }
 
+		//*
 		PeerInterface peer_interface = (PeerInterface) Naming.lookup("rmi://localhost/DBS_TEST");//args[0]); // Still need to do this part (look for last slash with regex)
+
 		switch (args[1].toUpperCase()) {
 			case "BACKUP":
                 Path filepath = Paths.get(args[2]);
@@ -47,7 +51,9 @@ public class PeerTest {
                 String fileID = PeerUtility.generateFileID(filepath);
                 byte[] file = Files.readAllBytes(filepath);
 
-                System.exit(peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3])));
+                @SuppressWarnings("unchecked")
+				Integer backup = ((RMIResult<Integer>) peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]))).call();
+				System.exit(backup);
 			case "RESTORE":
 			//	peer_interface.restore(args[2]);
 				break;
@@ -61,7 +67,9 @@ public class PeerTest {
 			//	System.out.println(peer_interface.state());
 				break;
 			case "STOP":
-				System.exit(peer_interface.stop());
+				peer_interface.stop();
+				break;
 		}
+		//*/
 	}
 }

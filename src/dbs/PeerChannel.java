@@ -3,7 +3,6 @@ package dbs;
 import java.io.IOException;
 import java.util.concurrent.LinkedTransferQueue;
 
-import dbs.util.PeerUtility;
 import net.MulticastChannel;
 
 public class PeerChannel implements Runnable {

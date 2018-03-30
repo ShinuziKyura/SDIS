@@ -1,7 +1,5 @@
 package dbs;
 
-import dbs.util.PeerUtility;
-
 import java.util.concurrent.LinkedTransferQueue;
 
 public class PeerQueue implements Runnable {
@@ -22,11 +20,13 @@ public class PeerQueue implements Runnable {
                 if (!message_header[2].equals(peer.ID)) {
                     switch(message_header[0].toUpperCase()) {
                         case "PUTCHUNK": // MDB
-
+                            if (!peer.DBMessages.containsKey(message_header[3])) {
+                                peer.executor.execute(new PeerProtocol(peer, buffer));
+                            }
                             break;
                         case "STORED": // MC
-                            if (peer.DBReplies.containsKey(message_header[3])) {
-                                peer.DBReplies.get(message_header[3]).put(buffer);
+                            if (peer.DBMessages.containsKey(message_header[3])) {
+                                peer.DBMessages.get(message_header[3]).put(buffer);
                             }
                             break;
                         case "GETCHUNK": // MC
