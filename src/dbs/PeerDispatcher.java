@@ -2,11 +2,11 @@ package dbs;
 
 import java.util.concurrent.LinkedTransferQueue;
 
-public class PeerQueue implements Runnable {
+public class PeerDispatcher implements Runnable {
     private Peer peer;
     private LinkedTransferQueue<byte[]> queue;
 
-    public PeerQueue(Peer peer, LinkedTransferQueue<byte[]> queue) {
+    public PeerDispatcher(Peer peer, LinkedTransferQueue<byte[]> queue) {
         this.peer = peer;
         this.queue = queue;
     }

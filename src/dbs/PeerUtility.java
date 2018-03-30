@@ -1,5 +1,7 @@
 package dbs;
 
+import org.omg.CORBA.INITIALIZE;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,17 +23,22 @@ public class PeerUtility {
             "(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])";
     public static final String PORT_REGEX =
             "6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}|0";
-    public static MessageDigest SHA_256_HASHER = null;
-    static {
+
+	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
+	public static final int MAXIMUM_CHUNK_SIZE = 64000;
+
+	public static final MessageDigest SHA_256_HASHER = SHA_256_HASHER();
+    private static MessageDigest SHA_256_HASHER() {
         try {
-            SHA_256_HASHER = MessageDigest.getInstance("SHA-256");
+            return MessageDigest.getInstance("SHA-256");
         }
         catch (NoSuchAlgorithmException e) {
             System.exit(1); // The uh-oh-that-cant-be-good status code
         }
+        return null;
     }
 
-    public enum MessageType {
+	public enum MessageType {
         PUTCHUNK,
         STORED,
         GETCHUNK,

@@ -18,11 +18,6 @@ public class RMIResult<T> implements Serializable {
 	}
 
 	public T call() {
-		if (operation != null) {
-			T result = operation.apply(operators);
-			operation = null;
-			return result;
-		}
-		return null;
+		return operation.apply(operators);
 	}
 }

@@ -1,12 +1,11 @@
 package dbs.test;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
-import java.util.Hashtable;
 
 import dbs.PeerInterface;
 import dbs.PeerUtility;
@@ -39,9 +38,8 @@ public class PeerTest {
                                "\n\t\t\t\t<byte_size> is a number between 0 and 9223372036854775807");
             System.exit(1);
         }
-
 		//*
-		PeerInterface peer_interface = (PeerInterface) Naming.lookup("rmi://localhost/DBS_TEST");//args[0]); // Still need to do this part (look for last slash with regex)
+		PeerInterface peer_interface = (PeerInterface) Naming.lookup("rmi://localhost/DBS_TEST");//args[0]); // TODO (look for last slash with regex)
 
 		switch (args[1].toUpperCase()) {
 			case "BACKUP":
@@ -55,16 +53,20 @@ public class PeerTest {
 				Integer backup = ((RMIResult<Integer>) peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]))).call();
 				System.exit(backup);
 			case "RESTORE":
-			//	peer_interface.restore(args[2]);
-				break;
+				@SuppressWarnings("unchecked")
+				Integer restore = ((RMIResult<Integer>) peer_interface.restore(args[2])).call();
+				System.exit(restore);
 			case "DELETE":
-			//	peer_interface.delete(args[2]);
-				break;
+				@SuppressWarnings("unchecked")
+				Integer delete = ((RMIResult<Integer>) peer_interface.delete(args[2])).call();
+				System.exit(delete);
 			case "RECLAIM":
-			//	peer_interface.reclaim(Integer.valueOf(args[2]));
-				break;
+				@SuppressWarnings("unchecked")
+				Integer reclaim = ((RMIResult<Integer>) peer_interface.reclaim(Integer.valueOf(args[2]))).call();
+				System.exit(reclaim);
 			case "STATE":
-			//	System.out.println(peer_interface.state());
+				String state = peer_interface.state();
+				System.out.println(state);
 				break;
 			case "STOP":
 				peer_interface.stop();
