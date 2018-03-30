@@ -16,7 +16,6 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.Hashtable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -77,8 +76,7 @@ public class Peer implements PeerInterface {
 	***** Member variables *****************************************************************************
 	***************************************************************************************************/
 
-	AtomicInteger processes;
-	AtomicBoolean running;
+	AtomicInteger instances;
 
 	ThreadPoolExecutor executor;
 
@@ -105,10 +103,10 @@ public class Peer implements PeerInterface {
 
 	public void run() {
 		// Subject to change
-		synchronized (running) {
-			while (running.get()) {
+		synchronized (instances) {
+			while (instances.get() >= 0) {
 				try {
-					running.wait();
+					instances.wait();
 				} catch (InterruptedException e) {
 					// Probably time to terminate
 				}
@@ -168,12 +166,11 @@ public class Peer implements PeerInterface {
 	}
 
 	public void stop() {
-		while (!processes.weakCompareAndSetPlain(0, Integer.MIN_VALUE));
-		running.set(false);
+		while (!instances.weakCompareAndSetPlain(0, Integer.MIN_VALUE));
 
 		// Subject to change
-		synchronized (running) {
-			running.notifyAll();
+		synchronized (instances) {
+			instances.notifyAll();
 		}
 	}
 
@@ -228,8 +225,7 @@ public class Peer implements PeerInterface {
 		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
 		ACCESS_POINT = access_point;
 
-		processes = new AtomicInteger(0);
-		running = new AtomicBoolean(true);
+		instances = new AtomicInteger(0);
 
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 

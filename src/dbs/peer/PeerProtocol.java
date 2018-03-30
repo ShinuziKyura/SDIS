@@ -18,7 +18,7 @@ public class PeerProtocol implements Runnable {
 	private byte[] body;
 
 	public PeerProtocol(Peer peer, byte[] message) {
-		if (peer.processes.getAndIncrement() < 0) {
+		if (peer.instances.getAndIncrement() < 0) {
 			return;
 		}
 
@@ -32,7 +32,7 @@ public class PeerProtocol implements Runnable {
 	@Override
 	public void run() {
 		if (peer == null) {
-			peer.processes.decrementAndGet();
+			peer.instances.decrementAndGet();
 			return;
 		}
 
@@ -51,19 +51,19 @@ public class PeerProtocol implements Runnable {
 				break;
 		}
 
-		peer.processes.decrementAndGet();
+		peer.instances.decrementAndGet();
 	}
 
 	public static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
-		if (peer.processes.getAndIncrement() < 0) {
-			peer.processes.decrementAndGet();
+		if (peer.instances.getAndIncrement() < 0) {
+			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Peer process terminating...");
 				return 1;
 			});
 		}
 		if (peer.DB_messages.containsKey(fileID)) {
-			peer.processes.decrementAndGet();
+			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Instance of BACKUP protocol for this fileID already exists" +
 				                   "\nBACKUP protocol terminating...");
@@ -72,7 +72,7 @@ public class PeerProtocol implements Runnable {
 		}
 
 		if (file.length == 0 || file.length > PeerUtility.MAXIMUM_FILE_SIZE) {
-			peer.processes.decrementAndGet();
+			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! File must be greater than 0 bytes and less than 64 gigabytes" +
 				                   "\nBACKUP protocol terminating...");
@@ -80,7 +80,7 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 		if (replication_degree < 1 || replication_degree > 9) {
-			peer.processes.decrementAndGet();
+			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! Replication degree must be greater than 0 and less than 10" +
 				                   "\nBACKUP protocol terminating...");
@@ -88,7 +88,7 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 		if (peer.stored_files.containsKey(filename) || peer.stored_chunks.containsKey(fileID)) {
-			peer.processes.decrementAndGet();
+			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nERROR! File already exists in the service" +
 				                   "\nBACKUP protocol terminating...");
@@ -149,7 +149,9 @@ public class PeerProtocol implements Runnable {
 			}
 		} while (++chunk_count < chunk_amount && stored != 0);
 
+		Integer failed_chunk = null;
 		if (stored == 0) {
+			failed_chunk = chunk_count - 1;
 			String failed_fileID = peer.stored_files.remove(filename);
 			while (--chunk_count >= 0) {
 				peer.stored_chunks.remove(failed_fileID + "." + chunk_count);
@@ -165,7 +167,7 @@ public class PeerProtocol implements Runnable {
 
 		peer.DB_messages.remove(fileID);
 
-		peer.processes.decrementAndGet();
+		peer.instances.decrementAndGet();
 
 		return (stored != 0 ?
 		        new RemoteFunction<>((args) -> {
@@ -175,7 +177,7 @@ public class PeerProtocol implements Runnable {
 			        System.err.println("\nERROR! Chunk " + args[0] + " could not be stored" +
 			                           "\nBACKUP protocol terminating...");
 			        return 21;
-		        }, new String[]{ Integer.toString(chunk_count) }));
+		        }, new Object[]{ failed_chunk }));
 	}
 
 	public void backup() {

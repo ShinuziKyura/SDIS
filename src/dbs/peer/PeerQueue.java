@@ -22,7 +22,7 @@ public class PeerQueue implements Runnable {
 
     @Override
     public void run() {
-        while (peer.running.get()) {
+        while (peer.instances.get() >= 0) {
             try {
                 byte[] buffer = queue.take();
                 String[] message_header = new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+");

@@ -18,7 +18,7 @@ public class PeerChannel implements Runnable {
 	
 	@Override
 	public void run() {
-		while (peer.running.get()) {
+		while (peer.instances.get() >= 0) {
 			try {
 				byte[] buffer = socket.receive();
 				queue.put(buffer);
