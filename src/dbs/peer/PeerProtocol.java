@@ -109,13 +109,13 @@ public class PeerProtocol implements Runnable {
 			HashSet<String> stored_peers = new HashSet<>();
 
 			String chunk_name = fileID + "." + chunk_count;
-			int chunk_size = (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE < file.length ?
+			int chunk_end = (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE < file.length ?
 			                 (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE :
 			                 file.length;
 			byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
 			                                                         peer.ID, fileID,
 			                                                         chunk_count, replication_degree);
-			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * PeerUtility.MAXIMUM_CHUNK_SIZE, chunk_size);
+			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * PeerUtility.MAXIMUM_CHUNK_SIZE, chunk_end);
 			byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
 
 			peer.stored_chunks.put(chunk_name, new AtomicInteger(0));

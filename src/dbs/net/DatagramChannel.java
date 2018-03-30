@@ -1,6 +1,7 @@
 package dbs.net;
 
 import java.net.InetAddress;
+import java.util.Arrays;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.io.IOException;
@@ -71,8 +72,8 @@ public class DatagramChannel {
 		this.packet = new DatagramPacket(this.buffer, BUFFER_SIZE);
 
 		this.socket.receive(this.packet);
-
-		return this.buffer;
+		
+		return Arrays.copyOf(this.packet.getData(), this.packet.getLength());
 	}
 
 	public void close() throws IOException {
