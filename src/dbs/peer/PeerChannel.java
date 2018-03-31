@@ -7,12 +7,12 @@ import dbs.net.MulticastChannel;
 
 public class PeerChannel implements Runnable {
 	private Peer peer;
-	private MulticastChannel socket;
+	private MulticastChannel channel;
 	private LinkedTransferQueue<byte[]> queue;
 	
-	public PeerChannel(Peer peer, MulticastChannel socket) {
+	PeerChannel(Peer peer, MulticastChannel channel) {
 		this.peer = peer;
-		this.socket = socket;
+		this.channel = channel;
 		this.queue = new LinkedTransferQueue<>();
 	}
 	
@@ -20,20 +20,20 @@ public class PeerChannel implements Runnable {
 	public void run() {
 		while (peer.instances.get() >= 0) {
 			try {
-				byte[] buffer = socket.receive();
+				byte[] buffer = channel.receive();
+
 				queue.put(buffer);
 			}
 			catch (IOException e) {
-				// Probably terminating, but we'll keep trying to receive()
-                // until running is set to false
+				// Probably terminating
 			}
 		}
 	}
 
-	public void stop() {
-	    while (!socket.isClosed()) {
+	void stop() {
+	    while (!channel.isClosed()) {
             try {
-                socket.close();
+                channel.close();
             }
             catch (IOException e) {
                 e.printStackTrace();
@@ -41,7 +41,7 @@ public class PeerChannel implements Runnable {
         }
     }
 
-	public LinkedTransferQueue<byte[]> queue(PeerQueue.ChannelQueue check) {
+	LinkedTransferQueue<byte[]> queue(PeerQueue.ChannelQueue check) {
 		check.getClass();
 		return queue;
 	}

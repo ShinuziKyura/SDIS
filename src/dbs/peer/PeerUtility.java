@@ -6,8 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
-import java.util.regex.Pattern;
 
 // Collection of utilities used throughout our code
 public class PeerUtility {
@@ -32,7 +30,9 @@ public class PeerUtility {
             return MessageDigest.getInstance("SHA-256");
         }
         catch (NoSuchAlgorithmException e) {
-            System.exit(1); // The uh-oh-that-cant-be-good status code
+	        System.err.println("\nERROR! Could not find instance of SHA-256 in system" +
+	                           "\nDistributed Backup Service terminating...");
+            System.exit(1); // The Uh-Oh-That-Cant-Be-Good status code
         }
         return null;
     }
@@ -43,8 +43,7 @@ public class PeerUtility {
         GETCHUNK,
         CHUNK,
         DELETE,
-        REMOVED,
-        STOP;
+        REMOVED
     }
 
 	public static class ProtocolVersion {

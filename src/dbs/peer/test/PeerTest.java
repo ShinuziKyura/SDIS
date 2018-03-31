@@ -39,7 +39,9 @@ public class PeerTest {
             System.exit(1);
         }
 		//*
-		PeerInterface peer_interface = (PeerInterface) Naming.lookup("rmi://localhost/DBS_TEST");//args[0]); // TODO (look for last slash with regex)
+		String[] access_point = args[0].split("\\/(?!.*\\/)");
+		PeerInterface peer_interface = (PeerInterface) Naming.lookup(
+				"rmi://" + (access_point.length > 1 ? access_point[0] : "localhost") + "/" + access_point[access_point.length - 1]);
 
 		switch (args[1].toUpperCase()) {
 			case "BACKUP":

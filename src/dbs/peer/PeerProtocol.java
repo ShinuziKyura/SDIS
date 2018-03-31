@@ -54,7 +54,7 @@ public class PeerProtocol implements Runnable {
 		peer.instances.decrementAndGet();
 	}
 
-	public static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
+	static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
 		if (peer.instances.getAndIncrement() < 0) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
@@ -90,7 +90,7 @@ public class PeerProtocol implements Runnable {
 		if (peer.stored_files.containsKey(filename) || peer.stored_chunks.containsKey(fileID)) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
-				System.err.println("\nERROR! File already exists in the service" +
+				System.err.println("\nERROR! File already exists in the service data" +
 				                   "\nBACKUP protocol terminating...");
 				return 13;
 			});
@@ -112,29 +112,28 @@ public class PeerProtocol implements Runnable {
 			int chunk_end = (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE < file.length ?
 			                 (chunk_count + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE :
 			                 file.length;
-			byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
+			byte[] message_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
 			                                                         peer.ID, fileID,
 			                                                         chunk_count, replication_degree);
-			byte[] chunk_body = Arrays.copyOfRange(file, chunk_count * PeerUtility.MAXIMUM_CHUNK_SIZE, chunk_end);
-			byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
+			byte[] message_body = Arrays.copyOfRange(file, chunk_count * PeerUtility.MAXIMUM_CHUNK_SIZE, chunk_end);
+			byte[] message = GenericArrays.join(message_header, message_body);
 
 			peer.stored_chunks.put(chunk_name, new AtomicInteger(0));
 
 			stored = 0;
 			requests = 0;
 			while (stored < replication_degree && requests < 5) {
-				byte[] message;
+				byte[] reply;
 				try {
-					peer.MDBSocket.send(chunk);
+					peer.MDBSocket.send(message);
 				}
 				catch (IOException e) {
 					// Shouldn't happen
 				}
 
-				//	replies.init((1 << requests++), TimeUnit.SECONDS);
-				replies.init(1 + requests++, TimeUnit.MILLISECONDS); // DEBUG
-				while ((message = replies.take()) != null) {
-					String[] header = new String(message).split("[ ]+");
+				replies.init((1 << requests++), TimeUnit.SECONDS);
+				while ((reply = replies.take()) != null) {
+					String[] header = new String(reply).split("[ ]+");
 					if (!stored_peers.contains(header[2]) && chunk_name.equals(header[3].toUpperCase() + "." + header[4])) {
 						stored_peers.add(header[2]);
 						++stored;
@@ -171,16 +170,17 @@ public class PeerProtocol implements Runnable {
 
 		return (stored != 0 ?
 		        new RemoteFunction<>((args) -> {
+		        	System.out.println("\nFile successfully backed up");
 			        return 0;
 		        }) :
 		        new RemoteFunction<>((args) -> {
 			        System.err.println("\nERROR! Chunk " + args[0] + " could not be stored" +
 			                           "\nBACKUP protocol terminating...");
 			        return 21;
-		        }, new Object[]{ failed_chunk }));
+		        }, new String[]{ failed_chunk.toString() }));
 	}
 
-	public void backup() {
+	private void backup() {
 		String filename = header[3].toUpperCase() + "." + header[4];
 		if (!peer.stored_chunks.containsKey(filename)) {
 			File file = new File("src/dbs/peer/data/" + filename);
@@ -223,36 +223,36 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	public static RemoteFunction restore(Peer peer, String pathname) {
+	static RemoteFunction restore(Peer peer, String pathname) {
 		// TODO
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
 
-	public void restore() {
+	private void restore() {
 		// TODO
 	}
 
-	public static RemoteFunction delete(Peer peer, String pathname) {
-		// TODO
-		return new RemoteFunction<>((args) -> {
-			return 0;
-		});
-	}
-
-	public void delete() {
-		// TODO
-	}
-
-	public static RemoteFunction reclaim(Peer peer, int disk_space) {
+	static RemoteFunction delete(Peer peer, String pathname) {
 		// TODO
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
 
-	public void reclaim() {
+	private void delete() {
+		// TODO
+	}
+
+	static RemoteFunction reclaim(Peer peer, int disk_space) {
+		// TODO
+		return new RemoteFunction<>((args) -> {
+			return 0;
+		});
+	}
+
+	private void reclaim() {
 		// TODO
 	}
 }

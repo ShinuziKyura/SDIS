@@ -6,6 +6,7 @@ import java.io.FileInputStream;
 import java.io.ObjectInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
+import java.net.NetworkInterface;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -19,6 +20,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
+import dbs.net.MainInterface;
 import dbs.peer.PeerUtility.ProtocolVersion;
 import dbs.rmi.RemoteFunction;
 import dbs.net.MulticastChannel;
@@ -54,14 +56,101 @@ public class Peer implements PeerInterface {
 		                     args[3], Integer.valueOf(args[4]),
 		                     args[5], Integer.valueOf(args[6]),
 		                     args[7], Integer.valueOf(args[8]));
-	/*	Peer peer = new Peer("1.0", 1,"DBS_TEST",
-							 "225.0.0.0", 8000,
-							 "225.0.0.0", 8001,
-							 "225.0.0.0", 8002); */
-
-		// TODO CONSISTENT ERROR CODES
 
 		peer.run();
+	}
+
+	/***************************************************************************************************
+	***** Constructor **********************************************************************************
+	***************************************************************************************************/
+
+	public Peer(String protocol_version, int id, String access_point,
+	            String MC_address, int MC_port,
+	            String MDB_address, int MDB_port,
+	            String MDR_address, int MDR_port) throws IOException {
+		System.out.println("\nInitializing peer...");
+
+		/* Single-comment this line to switch to Cool-Mode™
+		NetworkInterface net_int = MainInterface.find();
+		if (net_int != null) {
+			byte[] hw_addr = net_int.getHardwareAddress();
+			this.ID = String.format("%02x%02x%02x%02x%02x%02x@",
+									hw_addr[0], hw_addr[1], hw_addr[2],
+									hw_addr[3], hw_addr[4], hw_addr[5])
+							.concat(Long.toString(ProcessHandle.current().pid()));
+		}
+		else {
+			System.err.println("\nERROR! Could not establish a connection through any available interface" +
+			                   "\nDistributed Backup Service terminating...");
+			System.exit(1);
+			this.ID = null; // Placebo: So the compiler stops barking at us
+		}
+		/*/
+		this.ID = Integer.toString(id);
+		//*/
+
+		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
+		ACCESS_POINT = access_point;
+
+		instances = new AtomicInteger(0);
+
+		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+
+		try (FileInputStream files_stream = new FileInputStream("src/dbs/peer/metadata/files");
+		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
+		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
+		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
+			stored_files = (Hashtable<String, String>) files_object_stream.readObject();
+			stored_chunks = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
+		}
+		catch (IOException | ClassNotFoundException e) {
+			System.err.println("\nERROR! Couldn't load service metadata" +
+			                   "\nDistributed Backup Service terminating...");
+			System.exit(1);
+		}
+
+		DB_messages = new Hashtable<>();
+
+		MCSocket = new MulticastChannel(MC_address, MC_port);
+		MDBSocket = new MulticastChannel(MDB_address, MDB_port);
+		MDRSocket = new MulticastChannel(MDR_address, MDR_port);
+
+		MCChannel = new PeerChannel(this, MCSocket);
+		MDBChannel = new PeerChannel(this, MDBSocket);
+		MDRChannel = new PeerChannel(this, MDRSocket);
+
+		MCQueue = new PeerQueue(this, MCChannel);
+		MDBQueue = new PeerQueue(this, MDBChannel);
+		MDRQueue = new PeerQueue(this, MDRChannel);
+
+		executor.execute(MCChannel);
+		executor.execute(MDBChannel);
+		executor.execute(MDRChannel);
+
+		executor.execute(MCQueue);
+		executor.execute(MDBQueue);
+		executor.execute(MDRQueue);
+
+		try {
+			Registry registry;
+			try { // Like a really weird if-else-statement
+				registry = LocateRegistry.createRegistry(Registry.REGISTRY_PORT);
+			}
+			catch(RemoteException e) {
+				registry = LocateRegistry.getRegistry(Registry.REGISTRY_PORT);
+			}
+			registry.bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
+		}
+		catch (AlreadyBoundException e) {
+			UnicastRemoteObject.unexportObject(this, true);
+			System.err.println("\nERROR! Access point \"" + ACCESS_POINT + "\" is already in use" +
+			                   "\nDistributed Backup Service terminating...");
+			System.exit(11);
+		}
+
+		System.out.println("\nPeer initialized with ID: " + ID +
+		                   "\n\tProtocol version: " + PROTOCOL_VERSION +
+		                   "\n\tAccess point: " + ACCESS_POINT);
 	}
 
 	/***************************************************************************************************
@@ -104,7 +193,7 @@ public class Peer implements PeerInterface {
 	public void run() {
 		// Subject to change
 		synchronized (instances) {
-			while (instances.get() >= 0) {
+			while (instances.get() > 0) {
 				try {
 					instances.wait();
 				} catch (InterruptedException e) {
@@ -124,7 +213,7 @@ public class Peer implements PeerInterface {
 		}
 
 		try {
-			UnicastRemoteObject.unexportObject(this, false);
+			UnicastRemoteObject.unexportObject(this, true);
 		}
 		catch (NoSuchObjectException e) {
 			// That's weird, shouldn't... you guessed it
@@ -141,7 +230,7 @@ public class Peer implements PeerInterface {
 
 		executor.shutdown();
 
-		ObjectOutputStream objectstream;
+		boolean stored_metadata = true;
 		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/peer/metadata/files.new");
 		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/peer/metadata/chunks.new");
 		     ObjectOutputStream files_object_stream = new ObjectOutputStream(files_stream);
@@ -150,16 +239,19 @@ public class Peer implements PeerInterface {
 			chunks_object_stream.writeObject(stored_chunks);
 		}
 		catch (IOException e) {
-			// What should we do?
+			System.out.println("\nWARNING! Could not store updated metadata");
+			stored_metadata = false;
 		}
 
-		new File("src/dbs/peer/metadata/files.old").delete();
-		new File("src/dbs/peer/metadata/files").renameTo(new File("src/dbs/peer/metadata/files.old"));
-		new File("src/dbs/peer/metadata/files.new").renameTo(new File("src/dbs/peer/metadata/files"));
+		if (stored_metadata) {
+			new File("src/dbs/peer/metadata/files.old").delete();
+			new File("src/dbs/peer/metadata/files").renameTo(new File("src/dbs/peer/metadata/files.old"));
+			new File("src/dbs/peer/metadata/files.new").renameTo(new File("src/dbs/peer/metadata/files"));
 
-		new File("src/dbs/peer/metadata/chunks.old").delete();
-		new File("src/dbs/peer/metadata/chunks").renameTo(new File("src/dbs/peer/metadata/chunks.old"));
-		new File("src/dbs/peer/metadata/chunks.new").renameTo(new File("src/dbs/peer/metadata/chunks"));
+			new File("src/dbs/peer/metadata/chunks.old").delete();
+			new File("src/dbs/peer/metadata/chunks").renameTo(new File("src/dbs/peer/metadata/chunks.old"));
+			new File("src/dbs/peer/metadata/chunks.new").renameTo(new File("src/dbs/peer/metadata/chunks"));
+		}
 
 		System.out.println("\nPeer terminated");
 	}
@@ -192,92 +284,5 @@ public class Peer implements PeerInterface {
 
 	public RemoteFunction reclaim(int disk_space) {
 		return PeerProtocol.reclaim(this, disk_space);
-	}
-
-	/***************************************************************************************************
-	***** Constructor **********************************************************************************
-	***************************************************************************************************/
-
-	public Peer(String protocol_version, int id, String access_point,
-	            String MC_address, int MC_port,
-	            String MDB_address, int MDB_port,
-	            String MDR_address, int MDR_port) throws IOException {
-		System.out.println("\nInitializing peer...");
-
-		/* Single-comment this line to switch to Cool-Mode
-		NetworkInterface net_int = MainInterface.find();
-		if (net_int != null) {
-			byte[] hw_addr = net_int.getHardwareAddress();
-			this.ID = String.format("%02x%02x%02x%02x%02x%02x@",
-									hw_addr[0], hw_addr[1], hw_addr[2],
-									hw_addr[3], hw_addr[4], hw_addr[5])
-							.concat(Long.toString(ProcessHandle.current().pid()));
-		}
-		else {
-			throw new PeerException("Could not establish a connection through any available interface" +  // TODO Replace with error message and possibly System.exit
-									" - Distributed Backup Service unavailable");
-		}
-		/*/
-		this.ID = Integer.toString(id);
-		//*/
-
-		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
-		ACCESS_POINT = access_point;
-
-		instances = new AtomicInteger(0);
-
-		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
-
-		try (FileInputStream files_stream = new FileInputStream("src/dbs/peer/metadata/files");
-		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
-		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
-		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
-			stored_files = (Hashtable<String, String>) files_object_stream.readObject();
-			stored_chunks = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
-		}
-		catch (IOException | ClassNotFoundException e) {
-			// What should we do?
-		}
-
-		DB_messages = new Hashtable<>();
-
-		MCSocket = new MulticastChannel(MC_address, MC_port);
-		MDBSocket = new MulticastChannel(MDB_address, MDB_port);
-		MDRSocket = new MulticastChannel(MDR_address, MDR_port);
-
-		MCChannel = new PeerChannel(this, MCSocket);
-		MDBChannel = new PeerChannel(this, MDBSocket);
-		MDRChannel = new PeerChannel(this, MDRSocket);
-
-		MCQueue = new PeerQueue(this, MCChannel);
-		MDBQueue = new PeerQueue(this, MDBChannel);
-		MDRQueue = new PeerQueue(this, MDRChannel);
-
-		executor.execute(MCChannel);
-		executor.execute(MDBChannel);
-		executor.execute(MDRChannel);
-
-		executor.execute(MCQueue);
-		executor.execute(MDBQueue);
-		executor.execute(MDRQueue);
-
-		try {
-			try {
-				LocateRegistry.createRegistry(Registry.REGISTRY_PORT)
-				              .bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
-			}
-			catch(RemoteException e) {
-				LocateRegistry.getRegistry(Registry.REGISTRY_PORT)
-				              .bind(ACCESS_POINT, UnicastRemoteObject.exportObject(this, 0));
-			}
-		}
-		catch (AlreadyBoundException e) {
-			UnicastRemoteObject.unexportObject(this, true);
-			// throw new PeerException("Access point \"" + ACCESS_POINT + "\" is already in use"); // TODO Replace with System.err and System.exit
-		}
-
-		System.out.println("\nPeer initialized with ID: " + ID +
-		                   "\n\tProtocol version: " + PROTOCOL_VERSION +
-		                   "\n\tAccess point: " + ACCESS_POINT);
 	}
 }
