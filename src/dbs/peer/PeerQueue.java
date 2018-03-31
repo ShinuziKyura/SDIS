@@ -29,7 +29,8 @@ public class PeerQueue implements Runnable {
 				if (!message_header[2].equals(peer.ID)) {
 					switch(message_header[0].toUpperCase()) {
 						case "PUTCHUNK": // MDB
-							// Received PUTCHUNK from another Peer: Initiate protocol to backup chunk
+						case "GETCHUNK": // MC
+						case "DELETE": // MC
 							peer.executor.execute(new PeerProtocol(peer, buffer));
 							break;
 						case "STORED": // MC
@@ -51,10 +52,6 @@ public class PeerQueue implements Runnable {
 								}
 							}
 							break;
-						case "GETCHUNK": // MC
-							// Received GETCHUNK from another Peer: Initiate protocol to restore chunk
-							peer.executor.execute(new PeerProtocol(peer, buffer));
-							break;
 						case "CHUNK": // MDR
 							// Received CHUNK from another Peer:
 							// Forward message to initiator-protocol
@@ -73,9 +70,6 @@ public class PeerQueue implements Runnable {
 								catch (NullPointerException e) {
 								}
 							}
-							break;
-						case "DELETE": // MC
-
 							break;
 						case "REMOVED": // MC
 							break;

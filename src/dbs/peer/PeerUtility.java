@@ -88,6 +88,9 @@ public class PeerUtility {
             case REMOVED:
                 header += chunk_number + " \r\n\r\n";
                 break;
+            case DELETE:
+            	header += "\r\n\r\n";
+            	break;
         }
 
         return header.getBytes();
