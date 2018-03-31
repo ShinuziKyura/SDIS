@@ -1,11 +1,6 @@
 package dbs.peer;
 
 import java.io.IOException;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.ObjectInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectOutputStream;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -20,10 +15,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 import dbs.peer.PeerUtility.ProtocolVersion;
-import dbs.peer.PeerUtility.FileInfo;
+import dbs.peer.PeerUtility.FileMetadata;
+import dbs.peer.PeerUtility.ChunkMetadata;
 import dbs.rmi.RemoteFunction;
 import dbs.net.MulticastChannel;
 import dbs.util.concurrent.LinkedTransientQueue;
+
+import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
 
 public class Peer implements PeerInterface {
 
@@ -32,13 +30,12 @@ public class Peer implements PeerInterface {
 	***************************************************************************************************/
 
 	public static void main(String[] args) throws IOException {
-		//* Single-comment this line to activate the check
 		if (args.length != 9 || !(Pattern.matches(PeerUtility.PROTOCOL_VERSION_REGEX, args[0]) &&
 								  Pattern.matches(PeerUtility.PEER_ID_REGEX, args[1]) &&
 								  Pattern.matches(PeerUtility.ACCESS_POINT_REGEX, args[2]) &&
 								  Pattern.matches(PeerUtility.ADDRESS_REGEX, args[3]) && Pattern.matches(PeerUtility.PORT_REGEX, args[4]) &&
 								  Pattern.matches(PeerUtility.ADDRESS_REGEX, args[5]) && Pattern.matches(PeerUtility.PORT_REGEX, args[6]) &&
-								  Pattern.matches(PeerUtility.ADDRESS_REGEX, args[7]) && Pattern.matches(PeerUtility.PORT_REGEX, args[8]))) /**/ {
+								  Pattern.matches(PeerUtility.ADDRESS_REGEX, args[7]) && Pattern.matches(PeerUtility.PORT_REGEX, args[8]))) {
 			System.err.println("\n######## Distributed Backup Service ########" +
 							   "\nPeer must be called with the following arguments:" +
 							   "\n\t<protocol_version> <peer_id> <peer_ap> <MC_address> <MC_port> <MDB_address> <MDB_port> <MDR_address> <MDR_port>" +
@@ -95,12 +92,12 @@ public class Peer implements PeerInterface {
 
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 		/*
-		try (FileInputStream files_stream = new FileInputStream("src/dbs/peer/metadata/files");
-		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
-		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
-		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
-			files_metadata = (Hashtable<String, FileInfo>) files_object_stream.readObject();
-			chunks_metadata = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
+		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "files"));
+		     ObjectInputStream local_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
+		     ObjectInputStream remote_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"))) {
+			files_metadata = (Hashtable<String, FileMetadata>) files_stream.readObject();
+			local_chunks_metadata = (Hashtable<String, ChunkMetadata>) local_chunks_stream.readObject();
+			remote_chunks_metadata = (Hashtable<String, ChunkMetadata>) remote_chunks_stream.readObject();
 		}
 		catch (IOException | ClassNotFoundException e) {
 			System.err.println("\nFAILURE! Couldn't load service metadata" +
@@ -109,7 +106,8 @@ public class Peer implements PeerInterface {
 		}
 		/*/
 		files_metadata = new Hashtable<>();
-		chunks_metadata = new Hashtable<>();
+		local_chunks_metadata = new Hashtable<>();
+		remote_chunks_metadata = new Hashtable<>();
 		//*/
 		MDBmessages = new Hashtable<>();
 		MDRmessages = new Hashtable<>();
@@ -172,8 +170,9 @@ public class Peer implements PeerInterface {
 
 	ThreadPoolExecutor executor;
 
-	Hashtable<String, FileInfo> files_metadata;
-	Hashtable<String, AtomicInteger> chunks_metadata;
+	Hashtable<String, FileMetadata> files_metadata;
+	Hashtable<String, ChunkMetadata> local_chunks_metadata;
+	Hashtable<String, ChunkMetadata> remote_chunks_metadata;
 
 	Hashtable<String, LinkedTransientQueue<byte[]>> MDBmessages;
 	Hashtable<String, LinkedTransientQueue<byte[]>> MDRmessages;
@@ -235,12 +234,12 @@ public class Peer implements PeerInterface {
 		executor.shutdown();
 		/*
 		boolean stored_metadata = true;
-		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/peer/metadata/files.new");
-		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/peer/metadata/chunks.new");
-		     ObjectOutputStream files_object_stream = new ObjectOutputStream(files_stream);
-		     ObjectOutputStream chunks_object_stream = new ObjectOutputStream(chunks_stream)) {
-			files_object_stream.writeObject(files_metadata);
-			chunks_object_stream.writeObject(chunks_metadata);
+		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
+		     ObjectOutputStream local_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
+		     ObjectOutputStream remote_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "remotechunks.new"))) {
+			files_stream.writeObject(files_metadata);
+			local_chunks_stream.writeObject(local_chunks_metadata);
+			remote_chunks_stream.writeObject(remote_chunks_metadata);
 		}
 		catch (IOException e) {
 			System.out.println("\nWARNING! Could not store updated metadata");
@@ -248,13 +247,17 @@ public class Peer implements PeerInterface {
 		}
 
 		if (stored_metadata) {
-			new File("src/dbs/peer/metadata/files.old").delete();
-			new File("src/dbs/peer/metadata/files").renameTo(new File("src/dbs/peer/metadata/files.old"));
-			new File("src/dbs/peer/metadata/files.new").renameTo(new File("src/dbs/peer/metadata/files"));
+			new File(METADATA_DIRECTORY + "files.old").delete();
+			new File(METADATA_DIRECTORY + "files").renameTo(new File(METADATA_DIRECTORY + "files.old"));
+			new File(METADATA_DIRECTORY + "files.new").renameTo(new File(METADATA_DIRECTORY + "files"));
 
-			new File("src/dbs/peer/metadata/chunks.old").delete();
-			new File("src/dbs/peer/metadata/chunks").renameTo(new File("src/dbs/peer/metadata/chunks.old"));
-			new File("src/dbs/peer/metadata/chunks.new").renameTo(new File("src/dbs/peer/metadata/chunks"));
+			new File(METADATA_DIRECTORY + "localchunks.old").delete();
+			new File(METADATA_DIRECTORY + "localchunks").renameTo(new File(METADATA_DIRECTORY + "localchunks.old"));
+			new File(METADATA_DIRECTORY + "localchunks.new").renameTo(new File(METADATA_DIRECTORY + "localchunks"));
+
+			new File(METADATA_DIRECTORY + "remotechunks.old").delete();
+			new File(METADATA_DIRECTORY + "remotechunks").renameTo(new File(METADATA_DIRECTORY + "remotechunks.old"));
+			new File(METADATA_DIRECTORY + "remotechunks.new").renameTo(new File(METADATA_DIRECTORY + "remotechunks"));
 		}
 		//*/
 		System.out.println("\nPeer terminated");

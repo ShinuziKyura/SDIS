@@ -14,8 +14,7 @@ import dbs.rmi.RemoteFunction;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
-		//* Single-comment this line to activate the check
-		if (args.length < 2) /**/ {
+		if (args.length < 2) {
 			System.err.println("\n######## Distributed Backup Service ########" +
 			                   "\nPeerTest must be called with the following arguments:" +
 			                   "\n\t<gen_peer_ap> <sub_protocol> [<args> ...]" +
@@ -40,7 +39,7 @@ public class PeerTest {
 			                   "\n\t\t\t\t<byte_size> is a number between 0 and 9223372036854775807");
 			System.exit(1);
 		}
-		//*
+
 		String[] access_point = args[0].split("/(?!.*/)");
 		PeerInterface peer_interface = (PeerInterface) Naming.lookup(
 				"rmi://" + (access_point.length > 1 ? access_point[0] : "localhost") + "/" + access_point[access_point.length - 1]);

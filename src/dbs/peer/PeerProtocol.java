@@ -11,13 +11,17 @@ import java.util.LinkedList;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import dbs.peer.PeerUtility.MessageType;
-import dbs.peer.PeerUtility.FileInfo;
+import dbs.peer.PeerUtility.FileMetadata;
+import dbs.peer.PeerUtility.ChunkMetadata;
 import dbs.rmi.RemoteFunction;
 import dbs.util.GenericArrays;
 import dbs.util.concurrent.LinkedTransientQueue;
+
+import static dbs.peer.PeerUtility.MAXIMUM_FILE_SIZE;
+import static dbs.peer.PeerUtility.MAXIMUM_CHUNK_SIZE;
+import static dbs.peer.PeerUtility.DATA_DIRECTORY;
 
 public class PeerProtocol implements Runnable {
 	private Peer peer;
@@ -79,7 +83,7 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 
-		if (file.length == 0 || file.length > PeerUtility.MAXIMUM_FILE_SIZE) {
+		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -95,7 +99,7 @@ public class PeerProtocol implements Runnable {
 				return 12;
 			});
 		}
-		if (peer.files_metadata.containsKey(filename) || peer.chunks_metadata.containsKey(fileID)) {
+		if (peer.files_metadata.containsKey(filename) || peer.local_chunks_metadata.containsKey(fileID)) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File already exists in the service metadata" +
@@ -111,22 +115,22 @@ public class PeerProtocol implements Runnable {
 
 		int replies;
 		int chunk_number = 0;
-		int chunk_amount = file.length / PeerUtility.MAXIMUM_CHUNK_SIZE + 1;
-		peer.files_metadata.put(filename, new FileInfo(fileID, chunk_amount, replication_degree));
+		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
+		peer.files_metadata.put(filename, new FileMetadata(fileID, chunk_amount));
 		do {
 			HashSet<String> stored_peers = new HashSet<>();
 
 			String chunkID = fileID + "." + chunk_number;
-			int putchunk_body_length = (chunk_number + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE < file.length ?
-			                           (chunk_number + 1) * PeerUtility.MAXIMUM_CHUNK_SIZE :
+			int putchunk_body_length = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
+			                           (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
 			                           file.length;
 			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
 			                                                            peer.ID, fileID,
 			                                                            chunk_number, replication_degree);
-			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * PeerUtility.MAXIMUM_CHUNK_SIZE, putchunk_body_length);
+			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, putchunk_body_length);
 			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
 
-			peer.chunks_metadata.put(chunkID, new AtomicInteger(0));
+			peer.remote_chunks_metadata.put(chunkID, new ChunkMetadata(replication_degree, stored_peers));
 
 			replies = 0;
 			int requests = 0;
@@ -143,8 +147,7 @@ public class PeerProtocol implements Runnable {
 				while ((stored = messages.poll()) != null) {
 					String[] stored_header = new String(stored).split("[ ]+");
 
-					if (!stored_peers.contains(stored_header[2]) && chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
-						stored_peers.add(stored_header[2]);
+					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) && stored_peers.add(stored_header[2])) {
 						++replies;
 					}
 				}
@@ -162,10 +165,9 @@ public class PeerProtocol implements Runnable {
 			failed_chunk_number = chunk_number;
 
 			peer.files_metadata.remove(filename);
-			peer.chunks_metadata.remove(fileID);
 
 			do {
-				peer.chunks_metadata.remove(fileID + "." + chunk_number);
+				peer.remote_chunks_metadata.remove(fileID + "." + chunk_number);
 			} while (--chunk_number >= 0);
 
 			if (failed_chunk_number > 0) {
@@ -195,14 +197,19 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void backup() {
-		String filename = header[3].toUpperCase() + "." + header[4];
-		Path pathname = Paths.get("src/dbs/peer/data/" + filename);
-		if (peer.chunks_metadata.putIfAbsent(filename, new AtomicInteger(1)) == null) {
+		String chunkname = header[3].toUpperCase() + "." + header[4];
+		Path pathname = Paths.get(DATA_DIRECTORY + chunkname);
+
+		HashSet<String> putchunk_peers = new HashSet<>();
+		putchunk_peers.add(peer.ID);
+
+		if (!peer.remote_chunks_metadata.containsKey(chunkname) &&
+		    peer.local_chunks_metadata.putIfAbsent(chunkname, new ChunkMetadata(Integer.valueOf(header[5]), putchunk_peers)) == null) {
 			try {
 				Files.write(pathname, body, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
 			}
 			catch (IOException e) {
-				peer.chunks_metadata.remove(filename);
+				peer.local_chunks_metadata.remove(chunkname);
 				// File already exists; can't risk corrupting existing files
 				System.err.println("\nFAILURE! File already exists" +
 				                   "\nBACKUP protocol terminating...");
@@ -214,10 +221,10 @@ public class PeerProtocol implements Runnable {
 			int duration = ThreadLocalRandom.current().nextInt(401);
 			TimeUnit.MILLISECONDS.sleep(duration);
 
-			byte[] message = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
-			                                                    peer.ID, header[3],
-			                                                    Integer.valueOf(header[4]), null);
-			peer.MCsocket.send(message);
+			byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+			                                                   peer.ID, header[3],
+			                                                   Integer.valueOf(header[4]), null);
+			peer.MCsocket.send(stored);
 		}
 		catch (IOException | InterruptedException e) {
 			// Shouldn't happen
@@ -236,8 +243,8 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 
-		String fileID;
-		if ((fileID = peer.files_metadata.get(filename).fileID) == null) {
+		FileMetadata filemetadata;
+		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
@@ -249,15 +256,14 @@ public class PeerProtocol implements Runnable {
 		byte[] file = new byte[]{};
 
 		LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
-		peer.MDRmessages.put(fileID, messages);
+		peer.MDRmessages.put(filemetadata.fileID, messages);
 
 		// Works the same way as backup but it is supposed to be TCP
 		byte[] chunk;
 		int chunk_number = 0;
-		int chunk_amount = peer.files_metadata.get(filename).chunk_amount;
 		do {
 			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
-			                                                     peer.ID, fileID,
+			                                                     peer.ID, filemetadata.fileID,
 			                                                     chunk_number, null);
 
 			chunk = null;
@@ -276,16 +282,16 @@ public class PeerProtocol implements Runnable {
 					int chunk_header_length = chunk_header[0].length() + 4;
 					chunk_header = chunk_header[0].split("[ ]+");
 
-					if (fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
+					if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
 						file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk.length));
 						// We got the chunk we want, break from this loop
 						break;
 					}
 				}
 			}
-		} while(chunk != null && ++chunk_number < chunk_amount);
+		} while (chunk != null && ++chunk_number < filemetadata.chunk_amount);
 
-		peer.MDRmessages.remove(fileID);
+		peer.MDRmessages.remove(filemetadata.fileID);
 
 		return (chunk != null ?
 		        new RemoteFunction<>((args) -> {
@@ -301,10 +307,11 @@ public class PeerProtocol implements Runnable {
 
 	private void restore() {
 		String filename = header[3].toUpperCase() + "." + header[4];
-		Path pathname = Paths.get("src/dbs/peer/data/" + filename);
+		Path pathname = Paths.get(DATA_DIRECTORY + filename);
 
 		LinkedTransientQueue<byte[]> replies;
-		if (peer.chunks_metadata.containsKey(filename) &&
+
+		if (peer.local_chunks_metadata.containsKey(filename) &&
 		    peer.MDRmessages.putIfAbsent(filename, replies = new LinkedTransientQueue<>()) == null) {
 
 			byte[] chunk_body;
@@ -339,66 +346,58 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction delete(Peer peer, String filename) {
-
 		if (peer.instances.getAndIncrement() < 0) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! Peer process terminating...");
-				return new Object[]{ 1, new byte[]{} };
+				return 1;
 			});
 		}
 
-		String fileID;
-		if ((fileID = peer.files_metadata.get(filename).fileID) == null) {
+		FileMetadata filemetadata;
+		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			peer.instances.decrementAndGet();
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
-				                   "\nRESTORE protocol terminating...");
-				return new Object[]{ 21, new byte[]{} };
+				                   "\nDELETE protocol terminating...");
+				return 31;
 			});
 		}
 
-		byte[] delete_message = PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
-																								peer.ID, fileID,
-																										null, null);
-		peer.executor.execute(new Runnable() {
+		byte[] delete = PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
+		                                                   peer.ID, filemetadata.fileID,
+		                                                   null, null);
 
-			@Override
-			public void run() {
-				int requests = 0;
-				while (requests < 5) {
-					try {
-						Thread.sleep((1 << requests)*1000);
-					} catch (InterruptedException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
+		peer.executor.execute(() -> {
+			for (int requests = -1; requests < 4; ++requests) {
+				try {
+					if (requests != -1) {
+						TimeUnit.SECONDS.sleep(1 << requests);
 					}
 
-					try {
-						peer.MCsocket.send(delete_message);
-					}
-					catch (IOException e) {
-						// Shouldn't happen
-					}
+					peer.MCsocket.send(delete);
+				} catch (IOException | InterruptedException e) {
+					// Shouldn't happen
 				}
-
-				peer.files_metadata.remove(filename);
 			}
+
+			peer.files_metadata.remove(filename);
 		});
 
 		return new RemoteFunction<>((args) -> {
+			System.out.println("\nSUCCESS! File deleted");
 			return 0;
 		});
 	}
 
 	private void delete() {
-		String filename = header[3].toUpperCase();
-
-		File file=null;
-
-		for(int chunk_number=0; (file=new File("src/dbs/peer/data/" + filename + "." + chunk_number)).exists(); chunk_number++) {
-			file.delete();
-			peer.chunks_metadata.remove(filename + "." + chunk_number);
+		File[] chunks = new File(DATA_DIRECTORY).listFiles(
+				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.[0-9]{1,6}"));
+		if (chunks != null) {
+			for (File chunk : chunks) {
+				chunk.delete();
+				peer.local_chunks_metadata.remove(chunk.getName().split("\\.")[0]);
+			}
 		}
 	}
 

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.HashSet;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -23,6 +24,8 @@ public class PeerUtility {
 
 	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
 	public static final int MAXIMUM_CHUNK_SIZE = 64000;
+	public static final String METADATA_DIRECTORY = "src/dbs/peer/metadata/";
+	public static final String DATA_DIRECTORY = "src/dbs/peer/data/";
 
 	public static final MessageDigest SHA_256_HASHER = SHA_256_HASHER();
     private static MessageDigest SHA_256_HASHER() {
@@ -61,15 +64,23 @@ public class PeerUtility {
 		}
 	}
 
-	public static class FileInfo {
-    	public final String fileID;
-    	public final Integer chunk_amount;
-    	public final Integer chunk_replication;
+	public static class FileMetadata {
+		public final String fileID;
+		public final Integer chunk_amount;
 
-    	public FileInfo(String fileID, Integer chunk_amount, Integer chunk_replication) {
-    		this.fileID = fileID;
-    		this.chunk_amount = chunk_amount;
+		public FileMetadata(String fileID, Integer chunk_amount) {
+			this.fileID = fileID;
+			this.chunk_amount = chunk_amount;
+		}
+	}
+
+	public static class ChunkMetadata {
+		public final Integer chunk_replication;
+		public final HashSet<String> chunk_count;
+
+    	public ChunkMetadata(Integer chunk_replication, HashSet<String> chunk_count) {
     		this.chunk_replication = chunk_replication;
+    		this.chunk_count = chunk_count;
 		}
 	}
 
@@ -80,20 +91,17 @@ public class PeerUtility {
 
         switch (message_type) {
             case PUTCHUNK:
-                header += chunk_number + " " + replication_degree;
+                header += chunk_number + " " + replication_degree + " ";
                 break;
             case STORED:
             case GETCHUNK:
             case CHUNK:
             case REMOVED:
-                header += chunk_number;
+                header += chunk_number + " ";
                 break;
-            case DELETE:
-            	header += "\r\n\r\n";
-            	break;
         }
 
-        return (header + " \r\n\r\n").getBytes();
+        return (header + "\r\n\r\n").getBytes();
     }
 
     public static String generateFileID(Path filepath) throws IOException {

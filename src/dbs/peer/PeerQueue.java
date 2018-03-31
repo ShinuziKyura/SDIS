@@ -44,9 +44,16 @@ public class PeerQueue implements Runnable {
 								}
 							}
 							// The chunk may exist on our filesystem: increase count of chunks
-							if (peer.chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+							if (peer.local_chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
-									peer.chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).incrementAndGet();
+									peer.local_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).chunk_count.add(message_header[2]);
+								}
+								catch (NullPointerException e) {
+								}
+							}
+							if (peer.remote_chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+								try {
+									peer.remote_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).chunk_count.add(message_header[2]);
 								}
 								catch (NullPointerException e) {
 								}
