@@ -1,6 +1,9 @@
 package dbs.peer;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
@@ -223,15 +226,139 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction restore(Peer peer, String pathname) {
+	public static RemoteFunction restore(Peer peer, String filename) {
 		// TODO
+		if (peer.instances.getAndIncrement() < 0) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nERROR! Peer process terminating...");
+				return 1;
+			});
+		}
+		if (!peer.stored_files.containsKey(filename)) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nERROR! The file you are trying to restore was not backed up by this peer!" +
+						"\nRESTORE protocol terminating...");
+				return 2;
+			});
+		}
+		
+		String fileID = peer.stored_files.get(filename).toUpperCase();
+		
+		int chunk_number=0;
+		byte[] chunk=null;
+		byte[] chunk_body=null;
+		
+		LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
+		peer.DR_messages.put(fileID, replies);
+		
+		File file = new File("src/dbs/peer/restored_data/" + filename);
+		FileOutputStream file_stream = null;
+		
+		try {
+			file.createNewFile();
+			file_stream = new FileOutputStream(file);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+		
+		//works the same way as backup but it is supposed to be TCP
+		do {
+			byte[] chunk_request = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
+																								peer.ID, fileID,
+																								chunk_number, null);
+			int requests = 0;
+			boolean received = false;
+			
+			while (!received && requests < 5) {
+				try {
+					peer.MCSocket.send(chunk_request);
+				}
+				catch (IOException e) {
+					// Shouldn't happen
+				}
+
+				replies.init((1 << requests++), TimeUnit.SECONDS);
+				while ((chunk = replies.take()) != null) {
+					String[] header = new String(chunk).split("\r\n\r\n", 2)[0].split("[ ]+");
+					if (header[3].toUpperCase().equals(fileID) && Integer.parseInt(header[4])==chunk_number) {
+						
+						chunk_body = GenericArrays.split(chunk, new String(chunk).split("\r\n\r\n", 2)[0].getBytes().length)[1];
+						chunk_body = chunk_body.length > 4 ? java.util.Arrays.copyOfRange(chunk_body, 4, chunk_body.length) : null;
+						
+						if(chunk_body != null) {
+							try {
+								file_stream.write(chunk_body);
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+						}
+						received=true;
+						break;
+					}
+				}
+			}
+			
+			chunk_number++;
+		
+		}while(chunk_body != null && chunk_body.length == PeerUtility.MAXIMUM_CHUNK_SIZE);
+
+		peer.DR_messages.remove(fileID);
+		
+		try {
+			file_stream.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		System.out.println("Successfully Restored File!");
+		
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
 
-	private void restore() {
-		// TODO
+	public void restore() {
+		String filename = header[3].toUpperCase() + "." + header[4];
+		if (peer.stored_chunks.containsKey(filename) && !peer.DR_messages.containsKey(filename)) {
+			Path filepath = Paths.get("src/dbs/peer/data/" + filename);
+
+			byte[] chunk_body=null;
+			
+			try {
+				chunk_body = Files.readAllBytes(filepath);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			LinkedTransientQueue<byte[]> replies = new LinkedTransientQueue<>();
+			peer.DR_messages.put(filename, replies);
+			
+			replies.init(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
+			
+			if(replies.take() == null) {
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, peer.PROTOCOL_VERSION,
+																									peer.ID, header[3].toUpperCase(),
+																									Integer.parseInt(header[4]), null);
+				byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
+				
+				try {
+					peer.MDRSocket.send(chunk);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+			}
+			
+			peer.DR_messages.remove(filename);
+		}
 	}
 
 	static RemoteFunction delete(Peer peer, String pathname) {
