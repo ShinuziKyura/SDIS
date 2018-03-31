@@ -173,6 +173,7 @@ public class Peer implements PeerInterface {
 	Hashtable<String, AtomicInteger> stored_chunks;
 
 	Hashtable<String, LinkedTransientQueue<byte[]>> DB_messages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> DR_messages;
 
 	MulticastChannel MCSocket;  // multicast control
 	MulticastChannel MDBSocket; // multicast metadata backup
@@ -274,8 +275,8 @@ public class Peer implements PeerInterface {
 		return PeerProtocol.backup(this, filename, fileID, file, replication_degree);
 	}
 
-	public RemoteFunction restore(String pathname) {
-		return PeerProtocol.restore(this, pathname);
+	public RemoteFunction restore(String filename) {
+		return PeerProtocol.restore(this, filename);
 	}
 
 	public RemoteFunction delete(String pathname) {
