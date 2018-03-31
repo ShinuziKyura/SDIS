@@ -108,8 +108,12 @@ public class Peer implements PeerInterface {
 			                   "\nDistributed Backup Service terminating...");
 			System.exit(1);
 		}
+		
+		/*stored_files = new Hashtable<>();
+		stored_chunks = new Hashtable<>();*/
 
 		DB_messages = new Hashtable<>();
+		DR_messages = new Hashtable<>();
 
 		MCSocket = new MulticastChannel(MC_address, MC_port);
 		MDBSocket = new MulticastChannel(MDB_address, MDB_port);

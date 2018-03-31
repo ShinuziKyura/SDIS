@@ -52,10 +52,24 @@ public class PeerQueue implements Runnable {
 	                        }
                             break;
                         case "GETCHUNK": // MC
-
+                        	peer.executor.execute(new PeerProtocol(peer, buffer));
                             break;
                         case "CHUNK": // MDR
-
+                        	 if (peer.DR_messages.containsKey(message_header[3].toUpperCase())) {
+ 	                        	try {
+ 			                        peer.DR_messages.get(message_header[3].toUpperCase()).put(buffer);
+ 		                        }
+ 		                        catch (NullPointerException e) {
+ 		                        }
+ 	                        }
+                        	 
+                        	 if (peer.DR_messages.containsKey(message_header[3].toUpperCase()+"."+message_header[4])) {
+  	                        	try {
+  			                        peer.DR_messages.get(message_header[3].toUpperCase()+"."+message_header[4]).put(buffer);
+  		                        }
+  		                        catch (NullPointerException e) {
+  		                        }
+  	                        }
                             break;
                         case "DELETE": // MC
 
