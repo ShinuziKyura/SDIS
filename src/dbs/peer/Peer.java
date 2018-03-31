@@ -194,7 +194,7 @@ public class Peer implements PeerInterface {
 	public void run() {
 		// Subject to change
 		synchronized (instances) {
-			while (instances.get() > 0) {
+			while (instances.get() >= 0) {
 				try {
 					instances.wait();
 				} catch (InterruptedException e) {
@@ -279,8 +279,8 @@ public class Peer implements PeerInterface {
 		return PeerProtocol.restore(this, filename);
 	}
 
-	public RemoteFunction delete(String pathname) {
-		return PeerProtocol.delete(this, pathname);
+	public RemoteFunction delete(String filename) {
+		return PeerProtocol.delete(this, filename);
 	}
 
 	public RemoteFunction reclaim(int disk_space) {
