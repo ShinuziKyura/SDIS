@@ -80,17 +80,17 @@ public class PeerUtility {
 
         switch (message_type) {
             case PUTCHUNK:
-                header += chunk_number + " " + replication_degree + " \r\n\r\n";
+                header += chunk_number + " " + replication_degree;
                 break;
             case STORED:
             case GETCHUNK:
             case CHUNK:
             case REMOVED:
-                header += chunk_number + " \r\n\r\n";
+                header += chunk_number;
                 break;
         }
 
-        return header.getBytes();
+        return (header + " \r\n\r\n").getBytes();
     }
 
     public static String generateFileID(Path filepath) throws IOException {
@@ -100,7 +100,6 @@ public class PeerUtility {
                           "C" + filemetadata.creationTime() +
                           "M" + filemetadata.lastModifiedTime() +
                           "A" + filemetadata.lastAccessTime();
-
 
         byte[] hash = SHA_256_HASHER.digest(filename.getBytes());
 

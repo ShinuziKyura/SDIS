@@ -1,9 +1,6 @@
 package dbs.peer.test;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,6 +32,7 @@ public class PeerTest {
 			                   "\n\t\t\tDELETE <file_name>" +
 			                   "\n\t\t\tRECLAIM <size>" +
 			                   "\n\t\t\tSTATE" +
+			                   "\n\t\t\tSTOP" +
 			                   "\n\t\t\tAnd where:" +
 			                   "\n\t\t\t\t<file_path> is a Windows or POSIX, relative or absolute, path to a file" +
 			                   "\n\t\t\t\t<rep_deg> is a single digit between 1 and 9" +
@@ -42,9 +40,8 @@ public class PeerTest {
 			                   "\n\t\t\t\t<byte_size> is a number between 0 and 9223372036854775807");
 			System.exit(1);
 		}
-		// TODO change restored_data to test.data
 		//*
-		String[] access_point = args[0].split("\\/(?!.*\\/)");
+		String[] access_point = args[0].split("/(?!.*/)");
 		PeerInterface peer_interface = (PeerInterface) Naming.lookup(
 				"rmi://" + (access_point.length > 1 ? access_point[0] : "localhost") + "/" + access_point[access_point.length - 1]);
 
@@ -91,21 +88,5 @@ public class PeerTest {
 				peer_interface.stop();
 				break;
 		}
-		//*/
-
-	//	writeFile("64001B.txt", 64001);
-	}
-
-
-	static void writeFile(String s, int size) throws IOException {
-		File file = new File(s);
-		FileOutputStream os = new FileOutputStream(file);
-		OutputStreamWriter osw = new OutputStreamWriter(os);
-
-		for(int i=0; i < size; i++) {
-			osw.write(""+i % 10);
-		}
-
-		osw.close();
 	}
 }

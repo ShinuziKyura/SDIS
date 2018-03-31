@@ -301,11 +301,11 @@ public class PeerProtocol implements Runnable {
 
 	private void restore() {
 		String filename = header[3].toUpperCase() + "." + header[4];
+		Path pathname = Paths.get("src/dbs/peer/data/" + filename);
 
 		LinkedTransientQueue<byte[]> replies;
 		if (peer.chunks_metadata.containsKey(filename) &&
 		    peer.MDRmessages.putIfAbsent(filename, replies = new LinkedTransientQueue<>()) == null) {
-			Path pathname = Paths.get("src/dbs/peer/data/" + filename);
 
 			byte[] chunk_body;
 			try {
@@ -338,7 +338,8 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction delete(Peer peer, String pathname) {
+	static RemoteFunction delete(Peer peer, String filename) {
+
 		// TODO
 		return new RemoteFunction<>((args) -> {
 			return 0;
