@@ -6,7 +6,6 @@ import java.io.FileInputStream;
 import java.io.ObjectInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
-import java.net.NetworkInterface;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -20,8 +19,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
-import dbs.net.MainInterface;
 import dbs.peer.PeerUtility.ProtocolVersion;
+import dbs.peer.PeerUtility.FileInfo;
 import dbs.rmi.RemoteFunction;
 import dbs.net.MulticastChannel;
 import dbs.util.concurrent.LinkedTransientQueue;
@@ -80,7 +79,7 @@ public class Peer implements PeerInterface {
 							.concat(Long.toString(ProcessHandle.current().pid()));
 		}
 		else {
-			System.err.println("\nERROR! Could not establish a connection through any available interface" +
+			System.err.println("\nFAILURE! Could not establish a connection through any available interface" +
 			                   "\nDistributed Backup Service terminating...");
 			System.exit(1);
 			this.ID = null; // Placebo: So the compiler stops barking at us
@@ -95,45 +94,45 @@ public class Peer implements PeerInterface {
 		instances = new AtomicInteger(0);
 
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
-
+		/*
 		try (FileInputStream files_stream = new FileInputStream("src/dbs/peer/metadata/files");
 		     FileInputStream chunks_stream = new FileInputStream("src/dbs/peer/metadata/chunks");
 		     ObjectInputStream files_object_stream = new ObjectInputStream(files_stream);
 		     ObjectInputStream chunks_object_stream = new ObjectInputStream(chunks_stream)) {
-			stored_files = (Hashtable<String, String>) files_object_stream.readObject();
-			stored_chunks = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
+			files_metadata = (Hashtable<String, FileInfo>) files_object_stream.readObject();
+			chunks_metadata = (Hashtable<String, AtomicInteger>) chunks_object_stream.readObject();
 		}
 		catch (IOException | ClassNotFoundException e) {
-			System.err.println("\nERROR! Couldn't load service metadata" +
+			System.err.println("\nFAILURE! Couldn't load service metadata" +
 			                   "\nDistributed Backup Service terminating...");
 			System.exit(1);
 		}
-		
-		/*stored_files = new Hashtable<>();
-		stored_chunks = new Hashtable<>();*/
+		/*/
+		files_metadata = new Hashtable<>();
+		chunks_metadata = new Hashtable<>();
+		//*/
+		MDBmessages = new Hashtable<>();
+		MDRmessages = new Hashtable<>();
 
-		DB_messages = new Hashtable<>();
-		DR_messages = new Hashtable<>();
+		MCsocket = new MulticastChannel(MC_address, MC_port);
+		MDBsocket = new MulticastChannel(MDB_address, MDB_port);
+		MDRsocket = new MulticastChannel(MDR_address, MDR_port);
 
-		MCSocket = new MulticastChannel(MC_address, MC_port);
-		MDBSocket = new MulticastChannel(MDB_address, MDB_port);
-		MDRSocket = new MulticastChannel(MDR_address, MDR_port);
+		MCchannel = new PeerChannel(this, MCsocket);
+		MDBchannel = new PeerChannel(this, MDBsocket);
+		MDRchannel = new PeerChannel(this, MDRsocket);
 
-		MCChannel = new PeerChannel(this, MCSocket);
-		MDBChannel = new PeerChannel(this, MDBSocket);
-		MDRChannel = new PeerChannel(this, MDRSocket);
+		MCqueue = new PeerQueue(this, MCchannel);
+		MDBqueue = new PeerQueue(this, MDBchannel);
+		MDRqueue = new PeerQueue(this, MDRchannel);
 
-		MCQueue = new PeerQueue(this, MCChannel);
-		MDBQueue = new PeerQueue(this, MDBChannel);
-		MDRQueue = new PeerQueue(this, MDRChannel);
+		executor.execute(MCchannel);
+		executor.execute(MDBchannel);
+		executor.execute(MDRchannel);
 
-		executor.execute(MCChannel);
-		executor.execute(MDBChannel);
-		executor.execute(MDRChannel);
-
-		executor.execute(MCQueue);
-		executor.execute(MDBQueue);
-		executor.execute(MDRQueue);
+		executor.execute(MCqueue);
+		executor.execute(MDBqueue);
+		executor.execute(MDRqueue);
 
 		try {
 			Registry registry;
@@ -147,7 +146,7 @@ public class Peer implements PeerInterface {
 		}
 		catch (AlreadyBoundException e) {
 			UnicastRemoteObject.unexportObject(this, true);
-			System.err.println("\nERROR! Access point \"" + ACCESS_POINT + "\" is already in use" +
+			System.err.println("\nFAILURE! Access point \"" + ACCESS_POINT + "\" is already in use" +
 			                   "\nDistributed Backup Service terminating...");
 			System.exit(11);
 		}
@@ -173,23 +172,23 @@ public class Peer implements PeerInterface {
 
 	ThreadPoolExecutor executor;
 
-	Hashtable<String, String> stored_files;
-	Hashtable<String, AtomicInteger> stored_chunks;
+	Hashtable<String, FileInfo> files_metadata;
+	Hashtable<String, AtomicInteger> chunks_metadata;
 
-	Hashtable<String, LinkedTransientQueue<byte[]>> DB_messages;
-	Hashtable<String, LinkedTransientQueue<byte[]>> DR_messages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> MDBmessages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> MDRmessages;
 
-	MulticastChannel MCSocket;  // multicast control
-	MulticastChannel MDBSocket; // multicast metadata backup
-	MulticastChannel MDRSocket; // multicast metadata restore
+	MulticastChannel MCsocket;  // multicast control
+	MulticastChannel MDBsocket; // multicast data backup
+	MulticastChannel MDRsocket; // multicast data restore
 
-	private PeerChannel MCChannel;
-	private PeerChannel MDBChannel;
-	private PeerChannel MDRChannel;
+	private PeerChannel MCchannel;
+	private PeerChannel MDBchannel;
+	private PeerChannel MDRchannel;
 
-	private PeerQueue MCQueue;
-	private PeerQueue MDBQueue;
-	private PeerQueue MDRQueue;
+	private PeerQueue MCqueue;
+	private PeerQueue MDBqueue;
+	private PeerQueue MDRqueue;
 
 	/***************************************************************************************************
 	***** Member functions *****************************************************************************
@@ -225,23 +224,23 @@ public class Peer implements PeerInterface {
 			e.printStackTrace();
 		}
 
-		MCChannel.stop();
-		MDBChannel.stop();
-		MDRChannel.stop();
+		MCchannel.stop();
+		MDBchannel.stop();
+		MDRchannel.stop();
 
-		MCQueue.stop();
-		MDBQueue.stop();
-		MDRQueue.stop();
+		MCqueue.stop();
+		MDBqueue.stop();
+		MDRqueue.stop();
 
 		executor.shutdown();
-
+		/*
 		boolean stored_metadata = true;
 		try (FileOutputStream files_stream = new FileOutputStream("src/dbs/peer/metadata/files.new");
 		     FileOutputStream chunks_stream = new FileOutputStream("src/dbs/peer/metadata/chunks.new");
 		     ObjectOutputStream files_object_stream = new ObjectOutputStream(files_stream);
 		     ObjectOutputStream chunks_object_stream = new ObjectOutputStream(chunks_stream)) {
-			files_object_stream.writeObject(stored_files);
-			chunks_object_stream.writeObject(stored_chunks);
+			files_object_stream.writeObject(files_metadata);
+			chunks_object_stream.writeObject(chunks_metadata);
 		}
 		catch (IOException e) {
 			System.out.println("\nWARNING! Could not store updated metadata");
@@ -257,7 +256,7 @@ public class Peer implements PeerInterface {
 			new File("src/dbs/peer/metadata/chunks").renameTo(new File("src/dbs/peer/metadata/chunks.old"));
 			new File("src/dbs/peer/metadata/chunks.new").renameTo(new File("src/dbs/peer/metadata/chunks"));
 		}
-
+		//*/
 		System.out.println("\nPeer terminated");
 	}
 

@@ -30,7 +30,7 @@ public class PeerUtility {
             return MessageDigest.getInstance("SHA-256");
         }
         catch (NoSuchAlgorithmException e) {
-	        System.err.println("\nERROR! Could not find instance of SHA-256 in system" +
+	        System.err.println("\nFAILURE! Could not find instance of SHA-256 in system" +
 	                           "\nDistributed Backup Service terminating...");
             System.exit(1); // The Uh-Oh-That-Cant-Be-Good status code
         }
@@ -61,10 +61,22 @@ public class PeerUtility {
 		}
 	}
 
+	public static class FileInfo {
+    	public final String fileID;
+    	public final Integer chunk_amount;
+    	public final Integer chunk_replication;
+
+    	public FileInfo(String fileID, Integer chunk_amount, Integer chunk_replication) {
+    		this.fileID = fileID;
+    		this.chunk_amount = chunk_amount;
+    		this.chunk_replication = chunk_replication;
+		}
+	}
+
     public static byte[] generateProtocolHeader(MessageType message_type, ProtocolVersion protocol_version,
                                                 String id, String fileID,
                                                 Integer chunk_number, Integer replication_degree) {
-        String header = message_type + " " + protocol_version + " " + id + " " + fileID + " ";
+        String header = message_type + " " + protocol_version + " " + id + " " + fileID.toUpperCase() + " ";
 
         switch (message_type) {
             case PUTCHUNK:

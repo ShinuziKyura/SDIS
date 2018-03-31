@@ -38,7 +38,7 @@ public class LinkedTransientQueue<E> extends LinkedTransferQueue<E> {
     }
 
     @Override
-    public E take() {
+    public E poll() {
     	E e = null;
         long poll_duration = duration - (System.nanoTime() - init_time);
         if (poll_duration > 0) {

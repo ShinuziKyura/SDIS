@@ -3,89 +3,92 @@ package dbs.peer;
 import java.util.concurrent.LinkedTransferQueue;
 
 public class PeerQueue implements Runnable {
-    private Peer peer;
+	private Peer peer;
 	private Thread thread;
 	private LinkedTransferQueue<byte[]> queue;
 
-    static final class ChannelQueue {
+	static final class ChannelQueue {
 		private ChannelQueue() {
 		}
-    }
+	}
 	private static final ChannelQueue check = new ChannelQueue();
 
-    PeerQueue(Peer peer, PeerChannel channel) {
-        this.peer = peer;
-        this.queue = channel.queue(check);
-    }
+	PeerQueue(Peer peer, PeerChannel channel) {
+		this.peer = peer;
+		this.queue = channel.queue(check);
+	}
 
-    @Override
-    public void run() {
-    	thread = Thread.currentThread();
-        while (peer.instances.get() >= 0) {
-            try {
-                byte[] buffer = queue.take();
+	@Override
+	public void run() {
+		thread = Thread.currentThread();
+		while (peer.instances.get() >= 0) {
+			try {
+				byte[] buffer = queue.take();
 
-                String[] message_header = new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+");
-                if (!message_header[2].equals(peer.ID)) {
-                    switch(message_header[0].toUpperCase()) {
-                        case "PUTCHUNK": // MDB
-	                        // Received PUTCHUNK from another Peer: Initiate protocol to backup chunk
-	                        peer.executor.execute(new PeerProtocol(peer, buffer));
-                            break;
-                        case "STORED": // MC
-	                        // Received STORED from another Peer:
-	                        // A backup protocol may be running: forward messages to that protocol
-	                        if (peer.DB_messages.containsKey(message_header[3].toUpperCase())) {
-	                        	try {
-			                        peer.DB_messages.get(message_header[3].toUpperCase()).put(buffer);
-		                        }
-		                        catch (NullPointerException e) {
-		                        }
-	                        }
-	                        // The chunk may exist on our filesystem: increase count of chunks
-	                        if (peer.stored_chunks.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
-	                        	try {
-			                        peer.stored_chunks.get(message_header[3].toUpperCase() + "." + message_header[4]).incrementAndGet();
-		                        }
-		                        catch (NullPointerException e) {
-		                        }
-	                        }
-                            break;
-                        case "GETCHUNK": // MC
-                        	peer.executor.execute(new PeerProtocol(peer, buffer));
-                            break;
-                        case "CHUNK": // MDR
-                        	 if (peer.DR_messages.containsKey(message_header[3].toUpperCase())) {
- 	                        	try {
- 			                        peer.DR_messages.get(message_header[3].toUpperCase()).put(buffer);
- 		                        }
- 		                        catch (NullPointerException e) {
- 		                        }
- 	                        }
-                        	 
-                        	 if (peer.DR_messages.containsKey(message_header[3].toUpperCase()+"."+message_header[4])) {
-  	                        	try {
-  			                        peer.DR_messages.get(message_header[3].toUpperCase()+"."+message_header[4]).put(buffer);
-  		                        }
-  		                        catch (NullPointerException e) {
-  		                        }
-  	                        }
-                            break;
-                        case "DELETE": // MC
+				String[] message_header = new String(buffer).split("\r\n\r\n", 2)[0].split("[ ]+");
+				if (!message_header[2].equals(peer.ID)) {
+					switch(message_header[0].toUpperCase()) {
+						case "PUTCHUNK": // MDB
+							// Received PUTCHUNK from another Peer: Initiate protocol to backup chunk
+							peer.executor.execute(new PeerProtocol(peer, buffer));
+							break;
+						case "STORED": // MC
+							// Received STORED from another Peer:
+							// A backup initiator-protocol may be running: forward messages to that protocol
+							if (peer.MDBmessages.containsKey(message_header[3].toUpperCase())) {
+								try {
+									peer.MDBmessages.get(message_header[3].toUpperCase()).put(buffer);
+								}
+								catch (NullPointerException e) {
+								}
+							}
+							// The chunk may exist on our filesystem: increase count of chunks
+							if (peer.chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+								try {
+									peer.chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).incrementAndGet();
+								}
+								catch (NullPointerException e) {
+								}
+							}
+							break;
+						case "GETCHUNK": // MC
+							// Received GETCHUNK from another Peer: Initiate protocol to restore chunk
+							peer.executor.execute(new PeerProtocol(peer, buffer));
+							break;
+						case "CHUNK": // MDR
+							// Received CHUNK from another Peer:
+							// Forward message to initiator-protocol
+							if (peer.MDRmessages.containsKey(message_header[3].toUpperCase())) {
+								try {
+									peer.MDRmessages.get(message_header[3].toUpperCase()).put(buffer);
+								}
+								catch (NullPointerException e) {
+								}
+							}
+							// Notify any protocol that it no longer needs to send the message
+							if (peer.MDRmessages.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+								try {
+									peer.MDRmessages.get(message_header[3].toUpperCase() + "." + message_header[4]).put(buffer);
+								}
+								catch (NullPointerException e) {
+								}
+							}
+							break;
+						case "DELETE": // MC
 
-                            break;
-                        case "REMOVED": // MC
-                            break;
-                    }
-                }
-            }
-            catch (InterruptedException e) {
-                // Probably terminating
-            }
-        }
-    }
+							break;
+						case "REMOVED": // MC
+							break;
+					}
+				}
+			}
+			catch (InterruptedException e) {
+				// Probably terminating
+			}
+		}
+	}
 
-    void stop() {
-        thread.interrupt();
-    }
+	void stop() {
+		thread.interrupt();
+	}
 }
