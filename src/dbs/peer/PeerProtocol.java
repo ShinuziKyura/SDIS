@@ -1,7 +1,7 @@
 package dbs.peer;
 
+import java.io.File;
 import java.io.IOException;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -340,14 +340,66 @@ public class PeerProtocol implements Runnable {
 
 	static RemoteFunction delete(Peer peer, String filename) {
 
-		// TODO
+		if (peer.instances.getAndIncrement() < 0) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Peer process terminating...");
+				return new Object[]{ 1, new byte[]{} };
+			});
+		}
+
+		String fileID;
+		if ((fileID = peer.files_metadata.get(filename).fileID) == null) {
+			peer.instances.decrementAndGet();
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File does not exist in this service metadata" +
+				                   "\nRESTORE protocol terminating...");
+				return new Object[]{ 21, new byte[]{} };
+			});
+		}
+
+		byte[] delete_message = PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
+																								peer.ID, fileID,
+																										null, null);
+		peer.executor.execute(new Runnable() {
+
+			@Override
+			public void run() {
+				int requests = 0;
+				while (requests < 5) {
+					try {
+						Thread.sleep((1 << requests)*1000);
+					} catch (InterruptedException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+
+					try {
+						peer.MCsocket.send(delete_message);
+					}
+					catch (IOException e) {
+						// Shouldn't happen
+					}
+				}
+
+				peer.files_metadata.remove(filename);
+			}
+		});
+
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
 	}
 
 	private void delete() {
-		// TODO
+		String filename = header[3].toUpperCase();
+
+		File file=null;
+
+		for(int chunk_number=0; (file=new File("src/dbs/peer/data/" + filename + "." + chunk_number)).exists(); chunk_number++) {
+			file.delete();
+			peer.chunks_metadata.remove(filename + "." + chunk_number);
+		}
 	}
 
 	static RemoteFunction reclaim(Peer peer, int disk_space) {
