@@ -147,7 +147,7 @@ public class PeerProtocol implements Runnable {
 				while ((stored = messages.poll()) != null) {
 					String[] stored_header = new String(stored).split("[ ]+");
 
-					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) && stored_peers.add(stored_header[2])) {
+					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
 						++replies;
 					}
 				}
