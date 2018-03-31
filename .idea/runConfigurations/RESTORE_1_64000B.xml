@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="RESTORE-1-64000B" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="dbs.peer.test.PeerTest" />
+    <module name="SDIS" />
+    <option name="PROGRAM_PARAMETERS" value="DBS_1_TEST RESTORE src\dbs\peer\test\restore\64000B.txt" />
+    <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
+    <method />
+  </configuration>
+</component>
