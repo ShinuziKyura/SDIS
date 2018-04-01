@@ -283,7 +283,7 @@ public class Peer implements PeerInterface {
 	public void stop() {
 		exclusive_access.lock();
 		running.set(false);
-		condition.notify();
+		condition.signal();
 		exclusive_access.unlock();
 	}
 
