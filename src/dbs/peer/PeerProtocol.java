@@ -65,14 +65,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
-		if (peer.backup_messages.containsKey(fileID)) {
-			return new RemoteFunction<>((args) -> {
-				System.err.println("\nFAILURE! Instance of BACKUP protocol for this fileID already exists" +
-				                   "\nBACKUP protocol terminating...");
-				return 2;
-			});
-		}
-
 		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -87,7 +79,9 @@ public class PeerProtocol implements Runnable {
 				return 12;
 			});
 		}
-		if (peer.files_metadata.containsKey(filename)) {
+
+		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
+		if ((peer.files_metadata.putIfAbsent(filename, new FileMetadata(fileID, chunk_amount))) != null) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File already exists in the service metadata" +
 				                   "\nBACKUP protocol terminating...");
@@ -102,7 +96,6 @@ public class PeerProtocol implements Runnable {
 		peer.backup_messages.put(fileID, messages);
 
 		int chunk_number = 0;
-		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
 		do {
 			String chunkname = fileID + "." + chunk_number;
 			int putchunk_body_length = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
@@ -154,15 +147,10 @@ public class PeerProtocol implements Runnable {
 			chunks_stored_peers.put(chunkname, stored_peers);
 		} while (++chunk_number < chunk_amount);
 
-		peer.backup_messages.remove(fileID);
-
 		if (chunk_number != chunk_amount) {
-			if (chunk_number != 0) {
-				peer.executor.execute(
-						new PeerProtocol(peer, PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
-						                                                          peer.ID, fileID,
-						                                                          null, null)));
-			}
+			peer.files_metadata.remove(filename);
+
+			peer.backup_messages.remove(fileID);
 
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! Chunk " + args[0] + " could not be stored" +
@@ -171,10 +159,11 @@ public class PeerProtocol implements Runnable {
 			}, new Object[]{ chunk_number });
 		}
 
-		peer.files_metadata.put(filename, new FileMetadata(fileID, chunk_amount));
 		for (Map.Entry<String, Set<String>> csp : chunks_stored_peers.entrySet()) {
 			peer.remote_chunks_metadata.put(csp.getKey(), new ChunkMetadata(replication_degree, csp.getValue()));
 		}
+
+		peer.backup_messages.remove(fileID);
 
 		return new RemoteFunction<>((args) -> {
 			for (String arg : (LinkedList<String>) args[0]) {
@@ -232,6 +221,13 @@ public class PeerProtocol implements Runnable {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
 				                   "\nRESTORE protocol terminating...");
 				return 21;
+			});
+		}
+		if (peer.backup_messages.containsKey(filemetadata.fileID)) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File is being backed up by this service" +
+				                   "\nRESTORE protocol terminating...");
+				return 22;
 			});
 		}
 
@@ -400,13 +396,60 @@ public class PeerProtocol implements Runnable {
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
 				(dir, name) -> name.matches("[0-9A-F]{64}\\.([1-9][0-9]{0,5}|0)"));
 
-		if (disk_space == 0) {
-			if (chunks != null) {
-				for (File chunk : chunks) {
-					if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
-						chunk.delete();
+		if (chunks == null) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Could not reclaim disk space" +
+				                   "\nRECLAIM protocol terminating...");
+				return 41;
+			});
+		}
 
-						String[] chunkname = chunk.getName().split("\\.");
+		peer.executor.execute(() -> {
+			peer.exclusive_access.lock();
+			long requested_space = disk_space * 1000;
+			if (requested_space == 0) {
+					for (File chunk : chunks) {
+						if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
+							chunk.delete();
+
+							String[] chunkname = chunk.getName().split("\\.");
+
+							byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
+							                                                    peer.ID, chunkname[0],
+							                                                    Integer.valueOf(chunkname[1]), null);
+							try {
+								peer.MCsocket.send(removed);
+							}
+							catch (IOException e) {
+								// Shouldn't happen
+							}
+						}
+					}
+			}
+			else {
+				long occupied_space = 0;
+
+				for (File chunk : chunks) {
+					occupied_space += chunk.length();
+				}
+
+				String[] keys = (String[]) peer.local_chunks_metadata.keySet().toArray();
+				Arrays.sort(keys, (s1, s2) -> {
+					ChunkMetadata c1 = peer.local_chunks_metadata.get(s1);
+					ChunkMetadata c2 = peer.local_chunks_metadata.get(s2);
+					return Integer.compare(c2.perceived_replication.size() - c2.desired_replication,
+					                       c1.perceived_replication.size() - c1.desired_replication);
+				});
+
+				for (int chunk = 0; requested_space < occupied_space && chunk < keys.length; ++chunk) {
+					if (peer.local_chunks_metadata.remove(keys[chunk]) != null) {
+						File file = new File(DATA_DIRECTORY + keys[chunk]);
+
+						occupied_space -= file.length();
+
+						file.delete();
+
+						String[] chunkname = keys[chunk].split("\\.");
 
 						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
 						                                                    peer.ID, chunkname[0],
@@ -415,53 +458,16 @@ public class PeerProtocol implements Runnable {
 							peer.MCsocket.send(removed);
 						}
 						catch (IOException e) {
+							// Shouldn't happen
 						}
 					}
 				}
 			}
-		}
-		else {
-			long chunk_space = 0;
-			disk_space *= 1000;
+			peer.exclusive_access.unlock();
+		});
 
-			if (chunks != null) {
-				for (File chunk : chunks) {
-					chunk_space += chunk.length();
-				}
-			}
-
-			String[] keys = (String[]) peer.local_chunks_metadata.keySet().toArray();
-			Arrays.sort(keys, (s1, s2) -> {
-				ChunkMetadata c1 = peer.local_chunks_metadata.get(s1);
-				ChunkMetadata c2 = peer.local_chunks_metadata.get(s2);
-				return Integer.compare(c2.perceived_replication.size() - c2.desired_replication,
-				                       c1.perceived_replication.size() - c1.desired_replication);
-			});
-
-			for (int chunk = 0; disk_space < chunk_space && chunk < keys.length; ++chunk)
-			{
-				if (peer.local_chunks_metadata.remove(keys[chunk]) != null) {
-					File file = new File(DATA_DIRECTORY + keys[chunk]);
-
-					chunk_space -= file.length();
-
-					file.delete();
-
-					String[] chunkname = keys[chunk].split("\\.");
-
-					byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
-					                                                    peer.ID, chunkname[0],
-					                                                    Integer.valueOf(chunkname[1]), null);
-					try {
-						peer.MCsocket.send(removed);
-					}
-					catch (IOException e) {
-					}
-				}
-			}
-		}
-		
 		return new RemoteFunction<>((args) -> {
+			System.out.println("SUCCESS! Disk space reclaimed");
 			return 0;
 		});
 	}
