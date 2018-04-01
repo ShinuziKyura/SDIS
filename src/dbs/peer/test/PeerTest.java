@@ -66,11 +66,13 @@ public class PeerTest {
 					try {
 						Files.write(filepath, (byte[]) restore, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
 					} catch (IOException e) {
-						System.err.println("\nFAILURE! File already exists in system");
-						System.exit(1);
+						System.err.println("\nERROR! File already exists in system");
 					}
 				}
-				System.exit((Integer) restore);
+				else {
+					System.exit((Integer) restore);
+				}
+				System.exit(0);
 			}
 			case "DELETE":
 				@SuppressWarnings("unchecked")
