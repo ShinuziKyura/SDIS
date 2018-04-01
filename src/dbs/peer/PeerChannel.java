@@ -3,7 +3,7 @@ package dbs.peer;
 import java.io.IOException;
 import java.util.concurrent.LinkedTransferQueue;
 
-import dbs.net.MulticastChannel;
+import dbs.nio.channels.MulticastChannel;
 
 public class PeerChannel implements Runnable {
 	private Peer peer;
@@ -18,7 +18,7 @@ public class PeerChannel implements Runnable {
 	
 	@Override
 	public void run() {
-		while (peer.instances.get() >= 0) {
+		while (peer.running.get()) {
 			try {
 				byte[] buffer = channel.receive();
 

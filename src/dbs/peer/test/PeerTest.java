@@ -8,7 +8,6 @@ import java.nio.file.StandardOpenOption;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 
-import dbs.net.MulticastChannel;
 import dbs.peer.PeerInterface;
 import dbs.peer.PeerUtility;
 import dbs.rmi.RemoteFunction;
@@ -62,16 +61,16 @@ public class PeerTest {
 				String filename = filepath.getFileName().toString();
 
 				@SuppressWarnings("unchecked")
-				Object[] restore = ((RemoteFunction<Object[]>) peer_interface.restore(filename)).call();
-				if ((Integer) restore[0] == 0) {
+				Object restore = ((RemoteFunction<Object>) peer_interface.restore(filename)).call();
+				if (restore instanceof byte[]) {
 					try {
-						Files.write(filepath, (byte[]) restore[1], StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
+						Files.write(filepath, (byte[]) restore, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
 					} catch (IOException e) {
 						System.err.println("\nFAILURE! File already exists in system");
 						System.exit(1);
 					}
 				}
-				System.exit((Integer) restore[0]);
+				System.exit((Integer) restore);
 			}
 			case "DELETE":
 				@SuppressWarnings("unchecked")

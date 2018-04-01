@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.HashSet;
+import java.util.Set;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -24,8 +24,8 @@ public class PeerUtility {
 
 	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
 	public static final int MAXIMUM_CHUNK_SIZE = 64000;
-	public static final String METADATA_DIRECTORY = "src/dbs/peer/metadata/";
-	public static final String DATA_DIRECTORY = "src/dbs/peer/data/";
+	public static String METADATA_DIRECTORY = "src/dbs/peer/metadata/";
+	public static String DATA_DIRECTORY = "src/dbs/peer/data/";
 
 	public static final MessageDigest SHA_256_HASHER = SHA_256_HASHER();
     private static MessageDigest SHA_256_HASHER() {
@@ -76,12 +76,31 @@ public class PeerUtility {
 
 	public static class ChunkMetadata {
 		public final Integer desired_replication;
-		public final HashSet<String> perceived_replication;
+		public final Set<String> perceived_replication;
 
-    	public ChunkMetadata(Integer desired_replication, HashSet<String> perceived_replication) {
+    	public ChunkMetadata(Integer desired_replication, Set<String> perceived_replication) {
     		this.desired_replication = desired_replication;
     		this.perceived_replication = perceived_replication;
 		}
+	}
+
+	public static String generateFileID(Path filepath) throws IOException {
+		BasicFileAttributes filemetadata = Files.readAttributes(filepath, BasicFileAttributes.class);
+		String filename = "N" + filepath.getFileName() +
+		                  "S" + filemetadata.size() +
+		                  "C" + filemetadata.creationTime() +
+		                  "M" + filemetadata.lastModifiedTime() +
+		                  "A" + filemetadata.lastAccessTime();
+
+		byte[] hash = SHA_256_HASHER.digest(filename.getBytes());
+
+		StringBuilder hash_string = new StringBuilder(64);
+
+		for (byte hash_byte : hash) {
+			hash_string.append(String.format("%02x", hash_byte));
+		}
+
+		return hash_string.toString().toUpperCase();
 	}
 
     public static byte[] generateProtocolHeader(MessageType message_type, ProtocolVersion protocol_version,
@@ -102,24 +121,5 @@ public class PeerUtility {
         }
 
         return (header + "\r\n\r\n").getBytes();
-    }
-
-    public static String generateFileID(Path filepath) throws IOException {
-        BasicFileAttributes filemetadata = Files.readAttributes(filepath, BasicFileAttributes.class);
-        String filename = "N" + filepath.getFileName() +
-                          "S" + filemetadata.size() +
-                          "C" + filemetadata.creationTime() +
-                          "M" + filemetadata.lastModifiedTime() +
-                          "A" + filemetadata.lastAccessTime();
-
-        byte[] hash = SHA_256_HASHER.digest(filename.getBytes());
-
-        StringBuilder hash_string = new StringBuilder(64);
-
-        for (byte hash_byte : hash) {
-            hash_string.append(String.format("%02x", hash_byte));
-        }
-
-        return hash_string.toString().toUpperCase();
     }
 }

@@ -1,4 +1,4 @@
-package dbs.net;
+package dbs.nio.channels;
 
 import java.net.InetAddress;
 import java.util.Arrays;
