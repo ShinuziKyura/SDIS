@@ -114,6 +114,7 @@ public class Peer implements PeerInterface {
 		//*/
 		backup_messages = new ConcurrentHashMap<>();
 		restore_messages = new ConcurrentHashMap<>();
+		reclaim_messages = new ConcurrentHashMap<>();
 
 		MCsocket = new MulticastChannel(MC_address, MC_port);
 		MDBsocket = new MulticastChannel(MDB_address, MDB_port);
