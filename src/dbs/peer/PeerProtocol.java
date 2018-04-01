@@ -120,7 +120,7 @@ public class PeerProtocol implements Runnable {
 		do {
 			HashSet<String> stored_peers = new HashSet<>();
 
-			String chunkID = fileID + "." + chunk_number;
+			String chunkname = fileID + "." + chunk_number;
 			int putchunk_body_length = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
 			                           (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
 			                           file.length;
@@ -130,7 +130,7 @@ public class PeerProtocol implements Runnable {
 			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, putchunk_body_length);
 			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
 
-			peer.remote_chunks_metadata.put(chunkID, new ChunkMetadata(replication_degree, stored_peers));
+			peer.remote_chunks_metadata.put(chunkname, new ChunkMetadata(replication_degree, stored_peers));
 
 			replies = 0;
 			int requests = 0;
@@ -143,11 +143,11 @@ public class PeerProtocol implements Runnable {
 				}
 
 				byte[] stored;
-				messages.init((1 << requests++), TimeUnit.SECONDS);
+				messages.clear((1 << requests++), TimeUnit.SECONDS);
 				while ((stored = messages.poll()) != null) {
 					String[] stored_header = new String(stored).split("[ ]+");
 
-					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
+					if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
 						++replies;
 					}
 				}
@@ -232,6 +232,13 @@ public class PeerProtocol implements Runnable {
 	}
 
 	/*
+	 * RESTORE initiator-protocol
+	 *
+	 * Function called by initiator-peer to restore a file
+	 *
+	 * @param peer reference to peer
+	 * @param filename name of the file
+	 *
 	 * @return Object[] with status code at index 0 (Integer) and file at index 1 (byte[])
 	 */
 	static RemoteFunction restore(Peer peer, String filename) {
@@ -276,7 +283,7 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-				messages.init((1 << requests++), TimeUnit.SECONDS);
+				messages.clear((1 << requests++), TimeUnit.SECONDS);
 				while ((chunk = messages.poll()) != null) {
 					String[] chunk_header = new String(chunk).split("\r\n\r\n", 2);
 					int chunk_header_length = chunk_header[0].length() + 4;
@@ -293,6 +300,8 @@ public class PeerProtocol implements Runnable {
 
 		peer.restore_messages.remove(filemetadata.fileID);
 
+		peer.instances.decrementAndGet();
+
 		return (chunk != null ?
 		        new RemoteFunction<>((args) -> {
 		        	System.out.println("\nSUCCESS! File restored");
@@ -306,31 +315,31 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void restore() {
-		String filename = header[3].toUpperCase() + "." + header[4];
-		Path pathname = Paths.get(DATA_DIRECTORY + filename);
+		String chunkname = header[3].toUpperCase() + "." + header[4];
+		Path pathname = Paths.get(DATA_DIRECTORY + chunkname);
 
-		LinkedTransientQueue<byte[]> replies;
+		LinkedTransientQueue<byte[]> messages;
 
-		if (peer.local_chunks_metadata.containsKey(filename) &&
-		    peer.restore_messages.putIfAbsent(filename, replies = new LinkedTransientQueue<>()) == null) {
+		if (peer.local_chunks_metadata.containsKey(chunkname) &&
+		    peer.restore_messages.putIfAbsent(chunkname, (messages = new LinkedTransientQueue<>())) == null) {
 
 			byte[] chunk_body;
 			try {
 				chunk_body = Files.readAllBytes(pathname);
 			}
 			catch (IOException e) {
-				peer.restore_messages.remove(filename);
+				peer.restore_messages.remove(chunkname);
 				// File couldn't be read; can't risk sending corrupted files
 				System.err.println("\nFAILURE! File could not be read" +
 				                   "\nRESTORE protocol terminating...");
 				return;
 			}
 			
-			replies.init(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
-			if(replies.poll() == null) {
+			messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
+			if(messages.poll() == null) {
 				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, peer.PROTOCOL_VERSION,
 				                                                         peer.ID, header[3].toUpperCase(),
-				                                                         Integer.parseInt(header[4]), null);
+				                                                         Integer.valueOf(header[4]), null);
 				byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
 				
 				try {
@@ -341,7 +350,7 @@ public class PeerProtocol implements Runnable {
 				}
 			}
 			
-			peer.restore_messages.remove(filename);
+			peer.restore_messages.remove(chunkname);
 		}
 	}
 
@@ -382,6 +391,8 @@ public class PeerProtocol implements Runnable {
 			}
 
 			peer.files_metadata.remove(filename);
+
+			peer.instances.decrementAndGet();
 		});
 
 		return new RemoteFunction<>((args) -> {
@@ -396,7 +407,7 @@ public class PeerProtocol implements Runnable {
 		if (chunks != null) {
 			for (File chunk : chunks) {
 				chunk.delete();
-				peer.local_chunks_metadata.remove(chunk.getName().split("\\.")[0]);
+				peer.local_chunks_metadata.remove(chunk.getName());
 			}
 		}
 	}
@@ -409,67 +420,61 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void reclaim() {
+		String fileID = header[3].toUpperCase();
 		String chunkname = header[3].toUpperCase() + "." + header[4];
+		Path pathname = Paths.get(DATA_DIRECTORY + chunkname);
+
 		ChunkMetadata chunkmetadata = peer.local_chunks_metadata.get(chunkname);
-		
-		if(chunkmetadata.perceived_replication.size() < chunkmetadata.desired_replication) {
-			
-			Path pathname = Paths.get(DATA_DIRECTORY + chunkname);
+		LinkedTransientQueue<byte[]> messages;
 
-			LinkedTransientQueue<byte[]> replies;
+		if (chunkmetadata.desired_replication > chunkmetadata.perceived_replication.size() &&
+		    peer.backup_messages.putIfAbsent(chunkname, messages = new LinkedTransientQueue<>()) == null) {
+			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
+			                                                            peer.ID, fileID,
+			                                                            Integer.valueOf(header[4]), chunkmetadata.desired_replication);
+			byte[] putchunk_body;
+			try {
+				putchunk_body = Files.readAllBytes(pathname);
+			}
+			catch (IOException e) {
+				peer.backup_messages.remove(chunkname);
+				// File couldn't be read; can't risk sending corrupted files
+				System.err.println("\nFAILURE! File could not be read" +
+				                   "\nRECLAIM protocol terminating...");
+				return;
+			}
+			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
 
-			if (peer.reclaim_messages.putIfAbsent(chunkname, replies = new LinkedTransientQueue<>()) == null) {
+			messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
+			if (messages.poll() == null) {
+				messages = new LinkedTransientQueue<>();
+				peer.backup_messages.put(fileID, messages);
 
-				byte[] chunk_body;
-				
-				try {
-					chunk_body = Files.readAllBytes(pathname);
-				}
-				catch (IOException e) {
-					peer.reclaim_messages.remove(chunkname);
-					// File couldn't be read; can't risk sending corrupted files
-					System.err.println("\nFAILURE! File could not be read" +
-					                   "\nRECLAIM protocol terminating...");
-					return;
-				}
-				
-				replies.init(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
-				if(replies.poll() == null) {
-					byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
-					                                                         peer.ID, header[3].toUpperCase(),
-					                                                         Integer.parseInt(header[4]), chunkmetadata.desired_replication);
-					
-					byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
-					
-					LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
-					peer.backup_messages.put(header[3].toUpperCase(), messages);
-					
-					int number_of_replies = 0;
-					int requests = 0;
-					while (number_of_replies < chunkmetadata.desired_replication && requests < 5) {
-						try {
-							peer.MDBsocket.send(chunk);
-						}
-						catch (IOException e) {
-							// Shouldn't happen
-						}
+				int replies = 0;
+				int requests = 0;
+				while (replies < chunkmetadata.desired_replication && requests < 5) {
+					try {
+						peer.MDBsocket.send(putchunk);
+					}
+					catch (IOException e) {
+						// Shouldn't happen
+					}
 
-						byte[] stored;
-						messages.init((1 << requests++), TimeUnit.SECONDS);
-						while ((stored = messages.poll()) != null) {
-							String[] stored_header = new String(stored).split("[ ]+");
+					byte[] stored;
+					messages.clear((1 << requests++), TimeUnit.SECONDS);
+					while ((stored = messages.poll()) != null) {
+						String[] stored_header = new String(stored).split("[ ]+");
 
-							if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
-								++number_of_replies;
-							}
+						if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
+							++replies;
 						}
 					}
-					
-					peer.backup_messages.remove(header[3].toUpperCase());
 				}
-				
-				peer.reclaim_messages.remove(chunkname);
+
+				peer.backup_messages.remove(fileID);
 			}
+
+			peer.backup_messages.remove(chunkname);
 		}
 	}
 }

@@ -176,7 +176,6 @@ public class Peer implements PeerInterface {
 
 	Hashtable<String, LinkedTransientQueue<byte[]>> backup_messages;
 	Hashtable<String, LinkedTransientQueue<byte[]>> restore_messages;
-	Hashtable<String, LinkedTransientQueue<byte[]>> reclaim_messages;
 
 	MulticastChannel MCsocket;  // multicast control
 	MulticastChannel MDBsocket; // multicast data backup

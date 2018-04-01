@@ -29,9 +29,10 @@ public class PeerQueue implements Runnable {
 				if (!message_header[2].equals(peer.ID)) {
 					switch(message_header[0].toUpperCase()) {
 						case "PUTCHUNK": // MDB
-							if (peer.reclaim_messages.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
+							// A reclaim protocol may be running: forward messages to that protocol
+							if (peer.backup_messages.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
-									peer.reclaim_messages.get(message_header[3].toUpperCase() + "." + message_header[4]).put(buffer);
+									peer.backup_messages.get(message_header[3].toUpperCase() + "." + message_header[4]).put(buffer);
 								}
 								catch (NullPointerException e) {
 								}
@@ -42,7 +43,7 @@ public class PeerQueue implements Runnable {
 							break;
 						case "STORED": // MC
 							// Received STORED from another Peer:
-							// A backup initiator-protocol may be running: forward messages to that protocol
+							// A backup initiator-protocol or reclaim protocol may be running: forward messages to that protocol
 							if (peer.backup_messages.containsKey(message_header[3].toUpperCase())) {
 								try {
 									peer.backup_messages.get(message_header[3].toUpperCase()).put(buffer);
@@ -58,6 +59,7 @@ public class PeerQueue implements Runnable {
 								catch (NullPointerException e) {
 								}
 							}
+							// The chunk may belong to a file we backed up: increase count of chunks
 							else if (peer.remote_chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
 									peer.remote_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).perceived_replication.add(message_header[2]);
@@ -68,7 +70,7 @@ public class PeerQueue implements Runnable {
 							break;
 						case "CHUNK": // MDR
 							// Received CHUNK from another Peer:
-							// Forward message to initiator-protocol
+							// A restore initiator-protocol may be running: forward message to that protocol
 							if (peer.restore_messages.containsKey(message_header[3].toUpperCase())) {
 								try {
 									peer.restore_messages.get(message_header[3].toUpperCase()).put(buffer);
@@ -76,7 +78,7 @@ public class PeerQueue implements Runnable {
 								catch (NullPointerException e) {
 								}
 							}
-							// Notify any protocol that it no longer needs to send the message
+							// A restore protocol may be running: notify that protocol that it no longer needs to send the message
 							if (peer.restore_messages.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
 									peer.restore_messages.get(message_header[3].toUpperCase() + "." + message_header[4]).put(buffer);
@@ -86,7 +88,7 @@ public class PeerQueue implements Runnable {
 							}
 							break;
 						case "REMOVED": // MC
-							// The chunk may exist on our filesystem: decrease count of chunks
+							// The chunk may exist on our filesystem: decrease count of chunks and start reclaim protocol
 							if (peer.local_chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
 									peer.local_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).perceived_replication.remove(message_header[2]);
@@ -95,6 +97,7 @@ public class PeerQueue implements Runnable {
 								}
 								peer.executor.execute(new PeerProtocol(peer, buffer));
 							}
+							// The chunk may belong to a file we backed up: decrease count of chunks
 							else if (peer.remote_chunks_metadata.containsKey(message_header[3].toUpperCase() + "." + message_header[4])) {
 								try {
 									peer.remote_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4]).perceived_replication.remove(message_header[2]);
