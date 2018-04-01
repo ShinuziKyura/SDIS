@@ -418,6 +418,9 @@ public class PeerProtocol implements Runnable {
 							                                                    peer.ID, chunkname[0],
 							                                                    Integer.valueOf(chunkname[1]), null);
 							try {
+								peer.log.print("\nSending REMOVED message:" +
+								               "\n\tChunk: " + chunkname);
+
 								peer.MCsocket.send(removed);
 							}
 							catch (IOException e) {
@@ -455,6 +458,9 @@ public class PeerProtocol implements Runnable {
 						                                                    peer.ID, chunkname[0],
 						                                                    Integer.valueOf(chunkname[1]), null);
 						try {
+							peer.log.print("\nSending REMOVED message:" +
+							               "\n\tChunk: " + chunkname);
+
 							peer.MCsocket.send(removed);
 						}
 						catch (IOException e) {
@@ -482,6 +488,10 @@ public class PeerProtocol implements Runnable {
 		if (chunkmetadata != null && chunkmetadata.desired_replication > chunkmetadata.perceived_replication.size() &&
 		    peer.reclaim_messages.putIfAbsent(chunkname, messages = new LinkedTransientQueue<>()) == null) {
 			try {
+				peer.log.print("\nReceived REMOVED message:" +
+				               "\n\tSender: " + header[2] +
+				               "\n\tChunk: " + chunkname);
+
 				byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
 				                                                            peer.ID, header[3].toUpperCase(),
 				                                                            Integer.valueOf(header[4]), chunkmetadata.desired_replication);
