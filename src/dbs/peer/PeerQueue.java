@@ -36,6 +36,7 @@ public class PeerQueue implements Runnable {
 								}
 								catch (NullPointerException e) {
 								}
+								break; // <----- You guys probably won't understand why, but THIS "break;" is the single most brilliant idea ever...
 							}
 						case "GETCHUNK": // MC
 						case "DELETE": // MC
@@ -115,6 +116,7 @@ public class PeerQueue implements Runnable {
 		}
 	}
 
+	// TODO this is bad
 	void stop() {
 		thread.interrupt();
 	}

@@ -6,12 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.LinkedList;
-import java.util.Set;
-import java.util.Vector;
-import java.util.HashSet;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -112,6 +107,7 @@ public class PeerProtocol implements Runnable {
 		}
 
 		LinkedList<String> warnings = new LinkedList<>();
+		LinkedList<Object[]> chunk_stored_peers = new LinkedList<>();
 
 		LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
 		peer.backup_messages.put(fileID, messages);
@@ -133,8 +129,6 @@ public class PeerProtocol implements Runnable {
 			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, putchunk_body_length);
 			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
 
-			peer.remote_chunks_metadata.put(chunkname, new ChunkMetadata(replication_degree, stored_peers));
-
 			replies = 0;
 			int requests = 0;
 			while (replies < replication_degree && requests < 5) {
@@ -150,11 +144,14 @@ public class PeerProtocol implements Runnable {
 				while ((stored = messages.poll()) != null) {
 					String[] stored_header = new String(stored).split("[ ]+");
 
-					if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
+					if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])
+					    && stored_peers.add(stored_header[2])) {
 						++replies;
 					}
 				}
 			}
+
+			chunk_stored_peers.add(new Object[]{chunkname, stored_peers});
 
 			if (replies < replication_degree) {
 				warnings.add("\nWARNING! Replication degree of chunk " + chunk_number + " could not be met:" +
@@ -169,14 +166,16 @@ public class PeerProtocol implements Runnable {
 
 			peer.files_metadata.remove(filename);
 
-			do {
-				peer.remote_chunks_metadata.remove(fileID + "." + chunk_number);
-			} while (--chunk_number >= 0);
-
 			if (failed_chunk_number > 0) {
 				peer.executor.execute(new PeerProtocol(peer, PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
 				                                                                                peer.ID, fileID,
 				                                                                                null, null)));
+			}
+		}
+		else {
+			for (Object[] chunk_stored_peer : chunk_stored_peers) {
+				peer.remote_chunks_metadata.put((String) chunk_stored_peer[0],
+				                                new ChunkMetadata(replication_degree, (HashSet<String>) chunk_stored_peer[1]));
 			}
 		}
 
@@ -526,8 +525,11 @@ public class PeerProtocol implements Runnable {
 
 			messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
 			if (messages.poll() == null) {
+				System.out.println("First to send chunk");
+
 				messages = new LinkedTransientQueue<>();
 				peer.backup_messages.put(fileID, messages);
+				peer.local_chunks_metadata.remove(chunkname);
 
 				int replies = 0;
 				int requests = 0;
@@ -544,12 +546,14 @@ public class PeerProtocol implements Runnable {
 					while ((stored = messages.poll()) != null) {
 						String[] stored_header = new String(stored).split("[ ]+");
 
-						if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])) {
+						if (chunkname.equals(stored_header[3].toUpperCase() + "." + stored_header[4])
+						    && chunkmetadata.perceived_replication.add(stored_header[2])) {
 							++replies;
 						}
 					}
 				}
 
+				peer.local_chunks_metadata.put(chunkname, chunkmetadata);
 				peer.backup_messages.remove(fileID);
 			}
 
