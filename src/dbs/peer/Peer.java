@@ -109,8 +109,8 @@ public class Peer implements PeerInterface {
 		local_chunks_metadata = new Hashtable<>();
 		remote_chunks_metadata = new Hashtable<>();
 		//*/
-		MDBmessages = new Hashtable<>();
-		MDRmessages = new Hashtable<>();
+		backup_messages = new Hashtable<>();
+		restore_messages = new Hashtable<>();
 
 		MCsocket = new MulticastChannel(MC_address, MC_port);
 		MDBsocket = new MulticastChannel(MDB_address, MDB_port);
@@ -174,8 +174,9 @@ public class Peer implements PeerInterface {
 	Hashtable<String, ChunkMetadata> local_chunks_metadata;
 	Hashtable<String, ChunkMetadata> remote_chunks_metadata;
 
-	Hashtable<String, LinkedTransientQueue<byte[]>> MDBmessages;
-	Hashtable<String, LinkedTransientQueue<byte[]>> MDRmessages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> backup_messages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> restore_messages;
+	Hashtable<String, LinkedTransientQueue<byte[]>> reclaim_messages;
 
 	MulticastChannel MCsocket;  // multicast control
 	MulticastChannel MDBsocket; // multicast data backup

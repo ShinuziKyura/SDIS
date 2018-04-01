@@ -75,12 +75,12 @@ public class PeerUtility {
 	}
 
 	public static class ChunkMetadata {
-		public final Integer chunk_replication;
-		public final HashSet<String> chunk_count;
+		public final Integer desired_replication;
+		public final HashSet<String> perceived_replication;
 
-    	public ChunkMetadata(Integer chunk_replication, HashSet<String> chunk_count) {
-    		this.chunk_replication = chunk_replication;
-    		this.chunk_count = chunk_count;
+    	public ChunkMetadata(Integer desired_replication, HashSet<String> perceived_replication) {
+    		this.desired_replication = desired_replication;
+    		this.perceived_replication = perceived_replication;
 		}
 	}
 
