@@ -405,7 +405,7 @@ public class PeerProtocol implements Runnable {
 
 	private void delete() {
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
-				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.[0-9]{1,6}"));
+				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.([1-9][0-9]{0,5}|0)"));
 		if (chunks != null) {
 			for (File chunk : chunks) {
 				chunk.delete();
@@ -416,7 +416,7 @@ public class PeerProtocol implements Runnable {
 
 	static RemoteFunction reclaim(Peer peer, long disk_space) {
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
-				(dir, name) -> name.matches("[.]{64}\\."));
+				(dir, name) -> name.matches("[0-9A-F]{64}\\.([1-9][0-9]{0,5}|0)"));
 		
 		long occupied_space = 0;
 		disk_space*=1000;
