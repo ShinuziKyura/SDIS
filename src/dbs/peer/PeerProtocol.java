@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.Vector;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -428,12 +429,18 @@ public class PeerProtocol implements Runnable {
 		if(disk_space == 0) {
 			Set<String> keys = peer.local_chunks_metadata.keySet();
 			
+			Vector<String> elements = new Vector<String>();
+			
 			for(String key : keys) {
 				new File(DATA_DIRECTORY + key).delete();
 				
+				elements.add(key);
+			}
+
+			for(int i = 0; i < elements.size(); i++) {
 				byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
-																				peer.ID, key.split("\\.")[0],
-																							Integer.parseInt(key.split("\\.")[1]), null);
+																			peer.ID, elements.get(i).split("\\.")[0],
+																					Integer.parseInt(elements.get(i).split("\\.")[1]), null);
 				try {
 					peer.MCsocket.send(removed);
 				} catch (IOException e) {
@@ -441,8 +448,9 @@ public class PeerProtocol implements Runnable {
 					e.printStackTrace();
 				}
 				
-				peer.local_chunks_metadata.remove(key);
+				peer.local_chunks_metadata.remove(elements.get(i));
 			}
+			
 		}
 		else if(disk_space < occupied_space){
 			long space_freed = 0;
