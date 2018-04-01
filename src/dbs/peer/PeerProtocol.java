@@ -426,11 +426,22 @@ public class PeerProtocol implements Runnable {
 		}
 		
 		if(disk_space == 0) {
-			if (chunks != null) {
-				for (File chunk : chunks) {
-					chunk.delete(); //send messages
-					peer.local_chunks_metadata.remove(chunk.getName());
+			Set<String> keys = peer.local_chunks_metadata.keySet();
+			
+			for(String key : keys) {
+				new File(DATA_DIRECTORY + key).delete();
+				
+				byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
+																				peer.ID, key.split("\\.")[0],
+																							Integer.parseInt(key.split("\\.")[1]), null);
+				try {
+					peer.MCsocket.send(removed);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
+				
+				peer.local_chunks_metadata.remove(key);
 			}
 		}
 		else if(disk_space < occupied_space){
@@ -455,13 +466,21 @@ public class PeerProtocol implements Runnable {
 				}
 				
 				File f = new File(DATA_DIRECTORY + best_key);
-				
+
 				space_freed += f.length();
-				
+
 				f.delete(); 
-				
-				//falta mandar mensagem
-				
+
+				byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
+																			peer.ID, best_key.split("\\.")[0],
+																				Integer.parseInt(best_key.split("\\.")[1]), null);
+				try {
+					peer.MCsocket.send(removed);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
 				peer.local_chunks_metadata.remove(best_key);
 			}
 		}
