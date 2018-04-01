@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -412,8 +414,58 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction reclaim(Peer peer, int disk_space) {
-		// TODO
+	static RemoteFunction reclaim(Peer peer, long disk_space) {
+		File[] chunks = new File(DATA_DIRECTORY).listFiles(
+				(dir, name) -> name.matches("[.]{64}\\."));
+		
+		long occupied_space = 0;
+		disk_space*=1000;
+		
+		for (File chunk : chunks) {
+			occupied_space += chunk.length();
+		}
+		
+		if(disk_space == 0) {
+			if (chunks != null) {
+				for (File chunk : chunks) {
+					chunk.delete(); //send messages
+					peer.local_chunks_metadata.remove(chunk.getName());
+				}
+			}
+		}
+		else if(disk_space < occupied_space){
+			long space_freed = 0;
+			long space_to_free = occupied_space - disk_space;
+			
+			while(space_freed < space_to_free) {
+				Set<String> keys = peer.local_chunks_metadata.keySet();
+				
+				ChunkMetadata best_match = null;
+				String best_key="";
+				
+				for(String key : keys) {
+					ChunkMetadata c = peer.local_chunks_metadata.get(key);
+					
+					if(best_match == null || 
+							c.perceived_replication.size() - c.desired_replication > best_match.perceived_replication.size() - best_match.desired_replication) {
+						
+						best_match=c;
+						best_key=key;
+					}
+				}
+				
+				File f = new File(DATA_DIRECTORY + best_key);
+				
+				space_freed += f.length();
+				
+				f.delete(); 
+				
+				//falta mandar mensagem
+				
+				peer.local_chunks_metadata.remove(best_key);
+			}
+		}
+		
 		return new RemoteFunction<>((args) -> {
 			return 0;
 		});
