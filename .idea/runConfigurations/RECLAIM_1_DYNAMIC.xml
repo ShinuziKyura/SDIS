@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="RECLAIM-1-DYNAMIC" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="dbs.peer.test.PeerTest" />
+    <module name="SDIS" />
+    <option name="PROGRAM_PARAMETERS" value="DBS_1_TEST RECLAIM " />
+    <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
+    <method />
+  </configuration>
+</component>
