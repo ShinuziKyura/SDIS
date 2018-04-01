@@ -77,7 +77,7 @@ public class PeerTest {
 				System.exit(delete);
 			case "RECLAIM":
 				@SuppressWarnings("unchecked")
-				Integer reclaim = ((RemoteFunction<Integer>) peer_interface.reclaim(Integer.valueOf(args[2]))).call();
+				Integer reclaim = ((RemoteFunction<Integer>) peer_interface.reclaim(Long.valueOf(args[2]))).call();
 				System.exit(reclaim);
 			case "STATE":
 				String state = peer_interface.state();

@@ -290,7 +290,7 @@ public class Peer implements PeerInterface {
 		return PeerProtocol.delete(this, filename);
 	}
 
-	public RemoteFunction reclaim(int disk_space) {
+	public RemoteFunction reclaim(long disk_space) {
 		return PeerProtocol.reclaim(this, disk_space);
 	}
 }
