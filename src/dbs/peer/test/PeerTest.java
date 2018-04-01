@@ -8,6 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 
+import dbs.net.MulticastChannel;
 import dbs.peer.PeerInterface;
 import dbs.peer.PeerUtility;
 import dbs.rmi.RemoteFunction;
@@ -41,6 +42,7 @@ public class PeerTest {
 		}
 
 		String[] access_point = args[0].split("/(?!.*/)");
+		//*
 		PeerInterface peer_interface = (PeerInterface) Naming.lookup(
 				"rmi://" + (access_point.length > 1 ? access_point[0] : "localhost") + "/" + access_point[access_point.length - 1]);
 
@@ -87,5 +89,6 @@ public class PeerTest {
 				peer_interface.stop();
 				break;
 		}
+		//*/
 	}
 }
