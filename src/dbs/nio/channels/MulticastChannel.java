@@ -8,7 +8,7 @@ public class MulticastChannel extends DatagramChannel {
 	private String address;
 	private int port;
 	
-	public static boolean LAN = true;
+	public static int TTL = 5;
 
 	public MulticastChannel(String address, int port) throws IOException {
 		this.buffer = new byte[BUFFER_SIZE];
@@ -17,8 +17,8 @@ public class MulticastChannel extends DatagramChannel {
 		this.address = address;
 		this.port = port;
 		
-		if (LAN) {
-			((MulticastSocket) this.socket).setTimeToLive(1);
+		if (TTL != 0) {
+			((MulticastSocket) this.socket).setTimeToLive(TTL);
 		}
 		
 		((MulticastSocket) this.socket).joinGroup(InetAddress.getByName(this.address));

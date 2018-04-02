@@ -1,13 +1,13 @@
 package dbs.peer;
 
 import java.io.IOException;
-//*
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-//*/
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.rmi.AlreadyBoundException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
@@ -26,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static dbs.peer.PeerUtility.*;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
@@ -36,7 +37,7 @@ import dbs.nio.channels.MulticastChannel;
 import dbs.rmi.RemoteFunction;
 import dbs.util.concurrent.LinkedTransientQueue;
 //*
-import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
+
 //*/
 
 public class Peer implements PeerInterface {
@@ -107,12 +108,19 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
+
 		//*
-		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "files"));
-		     ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
-		     ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"));
-		     ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "storecap"));
-		     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "storeuse"))) { // TODO Enhancement: try to open any .new files if they exist
+		String files = FILES + (Files.exists(Paths.get(METADATA_DIRECTORY + FILES + NEW)) ? NEW : "");
+		String localchunks = LOCALCHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + LOCALCHUNKS + NEW)) ? NEW : "");
+		String remotechunks = REMOTECHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + REMOTECHUNKS + NEW)) ? NEW : "");
+		String storecap = STORECAP + (Files.exists(Paths.get(METADATA_DIRECTORY + STORECAP + NEW)) ? NEW : "");
+		String storeuse = STOREUSE + (Files.exists(Paths.get(METADATA_DIRECTORY + STOREUSE + NEW)) ? NEW : "");
+
+		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + files));
+		     ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + localchunks));
+		     ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + remotechunks));
+		     ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storecap));
+		     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storeuse))) {
 			files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
 			local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) localchunks_stream.readObject();
 			remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remotechunks_stream.readObject();
@@ -259,11 +267,11 @@ public class Peer implements PeerInterface {
 
 			log.print("\nMain - Updating...");
 
-			try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
-			     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
-			     ObjectOutputStream remotechunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "remotechunks.new"));
-			     ObjectOutputStream storecap_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "storecap.new"));
-			     ObjectOutputStream storeuse_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "storeuse.new"))) {
+			try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + FILES + NEW));
+			     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + LOCALCHUNKS + NEW));
+			     ObjectOutputStream remotechunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + REMOTECHUNKS + NEW));
+			     ObjectOutputStream storecap_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + STORECAP + NEW));
+			     ObjectOutputStream storeuse_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + STOREUSE + NEW))) {
 				files_stream.writeObject(files_metadata);
 				localchunks_stream.writeObject(local_chunks_metadata);
 				remotechunks_stream.writeObject(remote_chunks_metadata);
@@ -315,11 +323,11 @@ public class Peer implements PeerInterface {
 		executor.shutdown();
 		//*
 		boolean updated_metadata = true;
-		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
-		     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
-		     ObjectOutputStream remotechunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "remotechunks.new"));
-		     ObjectOutputStream storecap_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "storecap.new"));
-		     ObjectOutputStream storeuse_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "storeuse.new"))) {
+		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + FILES + NEW));
+		     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + LOCALCHUNKS + NEW));
+		     ObjectOutputStream remotechunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + REMOTECHUNKS + NEW));
+		     ObjectOutputStream storecap_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + STORECAP + NEW));
+		     ObjectOutputStream storeuse_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + STOREUSE + NEW))) {
 			files_stream.writeObject(files_metadata);
 			localchunks_stream.writeObject(local_chunks_metadata);
 			remotechunks_stream.writeObject(remote_chunks_metadata);
@@ -332,25 +340,11 @@ public class Peer implements PeerInterface {
 		}
 
 		if (updated_metadata) {
-			new File(METADATA_DIRECTORY + "files.old").delete();
-			new File(METADATA_DIRECTORY + "files").renameTo(new File(METADATA_DIRECTORY + "files.old"));
-			new File(METADATA_DIRECTORY + "files.new").renameTo(new File(METADATA_DIRECTORY + "files"));
-
-			new File(METADATA_DIRECTORY + "localchunks.old").delete();
-			new File(METADATA_DIRECTORY + "localchunks").renameTo(new File(METADATA_DIRECTORY + "localchunks.old"));
-			new File(METADATA_DIRECTORY + "localchunks.new").renameTo(new File(METADATA_DIRECTORY + "localchunks"));
-
-			new File(METADATA_DIRECTORY + "remotechunks.old").delete();
-			new File(METADATA_DIRECTORY + "remotechunks").renameTo(new File(METADATA_DIRECTORY + "remotechunks.old"));
-			new File(METADATA_DIRECTORY + "remotechunks.new").renameTo(new File(METADATA_DIRECTORY + "remotechunks"));
-
-			new File(METADATA_DIRECTORY + "storecap.old").delete();
-			new File(METADATA_DIRECTORY + "storecap").renameTo(new File(METADATA_DIRECTORY + "storecap.old"));
-			new File(METADATA_DIRECTORY + "storecap.new").renameTo(new File(METADATA_DIRECTORY + "storecap"));
-
-			new File(METADATA_DIRECTORY + "storeuse.old").delete();
-			new File(METADATA_DIRECTORY + "storeuse").renameTo(new File(METADATA_DIRECTORY + "storeuse.old"));
-			new File(METADATA_DIRECTORY + "storeuse.new").renameTo(new File(METADATA_DIRECTORY + "storeuse"));
+			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + FILES);
+			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + LOCALCHUNKS);
+			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + REMOTECHUNKS);
+			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + STORECAP);
+			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + STOREUSE);
 		}
 		//*/
 		System.out.println("\nPeer terminated");
@@ -396,7 +390,7 @@ public class Peer implements PeerInterface {
 	public RemoteFunction backup(String filename, String fileID, byte[] file, int replication_degree) {
 		shared_access.lock();
 		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.backup(this, filename, fileID, file, replication_degree) :
+		                         PeerProtocol.initiator_backup(this, filename, fileID, file, replication_degree) :
 		                         PeerProtocol.failure());
 		shared_access.unlock();
 		return result;
@@ -405,7 +399,7 @@ public class Peer implements PeerInterface {
 	public RemoteFunction restore(String filename) {
 		shared_access.lock();
 		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.restore(this, filename) :
+		                         PeerProtocol.initiator_restore(this, filename) :
 		                         PeerProtocol.failure());
 		shared_access.unlock();
 		return result;
@@ -414,7 +408,7 @@ public class Peer implements PeerInterface {
 	public RemoteFunction delete(String filename) {
 		shared_access.lock();
 		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.delete(this, filename) :
+		                         PeerProtocol.initiator_delete(this, filename) :
 		                         PeerProtocol.failure());
 		shared_access.unlock();
 		return result;
@@ -423,7 +417,7 @@ public class Peer implements PeerInterface {
 	public RemoteFunction reclaim(long disk_space) {
 		shared_access.lock();
 		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.reclaim(this, disk_space) :
+		                         PeerProtocol.initiator_reclaim(this, disk_space) :
 		                         PeerProtocol.failure());
 		shared_access.unlock();
 		return result;

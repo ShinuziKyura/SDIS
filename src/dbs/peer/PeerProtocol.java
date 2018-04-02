@@ -46,29 +46,45 @@ public class PeerProtocol implements Runnable {
 	public void run() {
 		switch (header[0].toUpperCase()) {
 			case "PUTCHUNK":
-				peer.shared_access.lock();
-				backup();
-				peer.shared_access.unlock();
+				switch (header[1]) {
+					case "1.0":
+						peer.shared_access.lock();
+						backup();
+						peer.shared_access.unlock();
+						break;
+				}
 				break;
 			case "GETCHUNK":
-				peer.shared_access.lock();
-				restore();
-				peer.shared_access.unlock();
+				switch (header[1]) {
+					case "1.0":
+						peer.shared_access.lock();
+						restore();
+						peer.shared_access.unlock();
+						break;
+				}
 				break;
 			case "DELETE":
-				peer.exclusive_access.lock();
-				delete();
-				peer.exclusive_access.unlock();
+				switch (header[1]) {
+					case "1.0":
+						peer.exclusive_access.lock();
+						delete();
+						peer.exclusive_access.unlock();
+						break;
+				}
 				break;
 			case "REMOVED":
-				peer.shared_access.lock();
-				reclaim();
-				peer.shared_access.unlock();
+				switch (header[1]) {
+					case "1.0":
+						peer.shared_access.lock();
+						reclaim();
+						peer.shared_access.unlock();
+						break;
+				}
 				break;
 		}
 	}
 
-	static RemoteFunction backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
+	static RemoteFunction initiator_backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
 		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -185,28 +201,46 @@ public class PeerProtocol implements Runnable {
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
+		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+		                                                   peer.ID, header[3],
+		                                                   Integer.valueOf(header[4]), null);
+
 		if (!peer.remote_chunks_metadata.containsKey(chunkID)) {
-			if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
-				peer.log.print("\nBackup <- Received PUTCHUNK message:" +
-				               "\n\tSender: " + header[2] +
-				               "\n\tChunk: " + chunkID);
+			if (peer.local_chunks_metadata.putIfAbsent(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers)) == null) {
+				if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
+					peer.log.print("\nBackup <- Received PUTCHUNK message:" +
+					               "\n\tSender: " + header[2] +
+					               "\n\tChunk: " + chunkID);
 
-				byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
-				                                                   peer.ID, header[3],
-				                                                   Integer.valueOf(header[4]), null);
-
-				if (peer.local_chunks_metadata.putIfAbsent(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers)) == null) {
 					try {
 						Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
 						            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
 
-					} catch (IOException e) {
+					}
+					catch (IOException e) {
 						// Really shouldn't happen, we won't delete the file from the local_chunks_metadata
 						peer.storage_usage.addAndGet(-body.length);
 						return;
 					}
-				}
 
+					try {
+						TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(401));
+					}
+					catch (InterruptedException e) {
+						// Shouldn't happen
+					}
+
+					peer.log.print("\nBackup <- Sending STORED message:" +
+					               "\n\tChunk: " + chunkID);
+
+					peer.MCsender.send(stored);
+				}
+				else {
+					peer.local_chunks_metadata.remove(chunkID);
+					peer.storage_usage.addAndGet(-body.length);
+				}
+			}
+			else {
 				try {
 					TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(401));
 				}
@@ -219,13 +253,10 @@ public class PeerProtocol implements Runnable {
 
 				peer.MCsender.send(stored);
 			}
-			else {
-				peer.storage_usage.addAndGet(-body.length);
-			}
 		}
 	}
 
-	static RemoteFunction restore(Peer peer, String filename) {
+	static RemoteFunction initiator_restore(Peer peer, String filename) {
 		FileMetadata filemetadata;
 		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			return new RemoteFunction<>((args) -> {
@@ -330,7 +361,7 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction delete(Peer peer, String filename) {
+	static RemoteFunction initiator_delete(Peer peer, String filename) {
 		if (!peer.files_metadata.containsKey(filename)) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
@@ -397,7 +428,7 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction reclaim(Peer peer, long disk_space) {
+	static RemoteFunction initiator_reclaim(Peer peer, long disk_space) {
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
 				(dir, name) -> name.matches("[0-9A-F]{64}\\.([1-9][0-9]{0,5}|0)"));
 

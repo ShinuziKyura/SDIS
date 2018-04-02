@@ -1,5 +1,6 @@
 package dbs.peer;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,8 +25,17 @@ public class PeerUtility {
 
 	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
 	public static final int MAXIMUM_CHUNK_SIZE = 64000;
+
 	public static String METADATA_DIRECTORY = "src/dbs/peer/metadata/";
 	public static String DATA_DIRECTORY = "src/dbs/peer/data/";
+
+	public static final String FILES = "files";
+	public static final String LOCALCHUNKS = "localchunks";
+	public static final String REMOTECHUNKS = "remotechunks";
+	public static final String STORECAP = "storecap";
+	public static final String STOREUSE = "storeuse";
+	public static final String NEW = ".new";
+	public static final String OLD = ".old";
 
 	public static final MessageDigest SHA_256_HASHER = SHA_256_HASHER();
     private static MessageDigest SHA_256_HASHER() {
@@ -110,20 +120,37 @@ public class PeerUtility {
     public static byte[] generateProtocolHeader(MessageType message_type, ProtocolVersion protocol_version,
                                                 String id, String fileID,
                                                 Integer chunk_number, Integer replication_degree) {
-        String header = message_type + " " + protocol_version + " " + id + " " + fileID.toUpperCase() + " ";
+        StringBuilder header = new StringBuilder(message_type.toString()
+                                                             .concat(" ")
+                                                             .concat(protocol_version.toString())
+                                                             .concat(" ")
+                                                             .concat(id)
+                                                             .concat(" ")
+                                                             .concat(fileID.toUpperCase())
+                                                             .concat(" "));
 
         switch (message_type) {
             case PUTCHUNK:
-                header += chunk_number + " " + replication_degree + " ";
+                header.append(chunk_number).append(" ").append(replication_degree).append(" ");
                 break;
             case STORED:
             case GETCHUNK:
             case CHUNK:
             case REMOVED:
-                header += chunk_number + " ";
+                header.append(chunk_number).append(" ");
                 break;
         }
 
-        return (header + "\r\n\r\n").getBytes();
+        return header.append("\r\n\r\n").toString().getBytes();
+    }
+
+    public static void synchronizeFilenames(String filename) {
+	    File file_old = new File(filename.concat(OLD));
+	    File file = new File(filename);
+	    File file_new = new File(filename.concat(NEW));
+
+	    file_old.delete();
+	    file.renameTo(file_old);
+	    file_new.renameTo(file);
     }
 }
