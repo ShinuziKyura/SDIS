@@ -444,7 +444,6 @@ public class PeerProtocol implements Runnable {
 			}
 			else {
 				String[] keys = peer.local_chunks_metadata.keySet().toArray(new String[peer.local_chunks_metadata.size()]);
-				
 				Arrays.sort(keys, (s1, s2) -> {
 					ChunkMetadata c1 = peer.local_chunks_metadata.get(s1);
 					ChunkMetadata c2 = peer.local_chunks_metadata.get(s2);
