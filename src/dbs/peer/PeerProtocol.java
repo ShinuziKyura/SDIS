@@ -428,6 +428,8 @@ public class PeerProtocol implements Runnable {
 			if (peer.total_space.get() == Long.MAX_VALUE) {
 				for (File chunk : chunks) {
 					if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
+						peer.use_space.addAndGet(-chunk.length());
+						
 						chunk.delete();
 
 						String[] chunkmetadata = chunk.getName().split("\\.");
