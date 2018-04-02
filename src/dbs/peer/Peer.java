@@ -246,7 +246,7 @@ public class Peer implements PeerInterface {
 				// Won't happen
 			}
 
-			log.print("\nUpdating...");
+			log.print("\nMain - Updating...");
 
 			try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
 			     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
@@ -260,7 +260,7 @@ public class Peer implements PeerInterface {
 				storeuse_stream.writeObject(storage_usage);
 			}
 			catch (IOException e) {
-				// Meh, we'll try again in 5 mins
+				// Meh, we'll try again in a minute
 			}
 		}
 
@@ -355,19 +355,19 @@ public class Peer implements PeerInterface {
 			             "\n\t\tDesired replication degree: " + file.getValue().desired_replication);
 			for (Map.Entry<String, ChunkMetadata> chunk : remote_chunks_metadata.entrySet()) {
 				state.append("\n\t\t\tChunk ID: " + chunk.getKey() +
-				             "\n\t\t\t\tChunk size: " + chunk.getValue().chunk_size +
+				             "\n\t\t\t\tChunk size: " + chunk.getValue().chunk_size + "B" +
 				             "\n\t\t\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
 			}
 		}
 		state.append("\nChunks:");
 		for (Map.Entry<String, ChunkMetadata> chunk : local_chunks_metadata.entrySet()) {
 			state.append("\n\tChunk ID: " + chunk.getKey() +
-			             "\n\t\tChunk size: " + chunk.getValue().chunk_size +
+			             "\n\t\tChunk size: " + chunk.getValue().chunk_size + "B" +
 			             "\n\t\tDesired replication degree: " + chunk.getValue().desired_replication +
 			             "\n\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
 		}
-		state.append("\nStorage capacity: " + storage_capacity.get() +
-		             "\nStorage usage: " + storage_usage.get());
+		state.append("\nStorage capacity: " + storage_capacity.get() + "B" +
+		             "\nStorage usage: " + storage_usage.get() + "B");
 		exclusive_access.unlock();
 		return state.toString();
 	}
