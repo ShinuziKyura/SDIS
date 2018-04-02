@@ -84,10 +84,10 @@ public class Peer implements PeerInterface {
 		NetworkInterface net_int = MainInterface.find();
 		if (net_int != null) {
 			byte[] hw_addr = net_int.getHardwareAddress();
-			this.ID = String.format("%02x%02x%02x%02x%02x%02x@",
-									hw_addr[0], hw_addr[1], hw_addr[2],
-									hw_addr[3], hw_addr[4], hw_addr[5])
-							.concat(Long.toString(ProcessHandle.current().pid()));
+			ID = String.format("%02x%02x%02x%02x%02x%02x@",
+			                   hw_addr[0], hw_addr[1], hw_addr[2],
+			                   hw_addr[3], hw_addr[4], hw_addr[5])
+			           .concat(Long.toString(ProcessHandle.current().pid()));
 		}
 		else {
 			System.err.println("\nFAILURE! Could not establish a connection through any available interface" +
@@ -96,7 +96,7 @@ public class Peer implements PeerInterface {
 			this.ID = null; // Placebo: So the compiler stops barking at us
 		}
 		/*/
-		this.ID = Integer.toString(id);
+		ID = Integer.toString(id);
 		//*/
 		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
 		ACCESS_POINT = access_point;
@@ -109,7 +109,7 @@ public class Peer implements PeerInterface {
 		
 		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
 		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
-		
+
 		if(!new File(DATA_DIRECTORY).exists()) {
 			new File(DATA_DIRECTORY).mkdirs();
 		}
