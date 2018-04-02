@@ -66,7 +66,7 @@ public class PeerTest {
 					try {
 						Files.write(filepath, (byte[]) restore, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
 					} catch (IOException e) {
-						System.err.println("\nERROR! File already exists in system");
+						System.err.println("\nERROR! File could not be stored");
 					}
 				}
 				else {
