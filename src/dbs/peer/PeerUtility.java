@@ -2,6 +2,7 @@ package dbs.peer;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -74,7 +75,7 @@ public class PeerUtility {
 		}
 	}
 
-	public static class FileMetadata {
+	public static class FileMetadata implements Serializable {
 		public final String fileID;
 		public final Integer chunk_amount;
 		public final Integer desired_replication;
@@ -86,7 +87,7 @@ public class PeerUtility {
 		}
 	}
 
-	public static class ChunkMetadata {
+	public static class ChunkMetadata implements Serializable {
     	public final Integer chunk_size;
 		public final Integer desired_replication;
 		public final Set<String> perceived_replication;

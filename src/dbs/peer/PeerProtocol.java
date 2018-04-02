@@ -46,17 +46,22 @@ public class PeerProtocol implements Runnable {
 	public void run() {
 		switch (header[0].toUpperCase()) {
 			case "PUTCHUNK":
-				switch (header[1]) {
-					case "1.0":
+				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
+					case 0:
 						peer.shared_access.lock();
 						backup();
+						peer.shared_access.unlock();
+						break;
+					case 1:
+						peer.shared_access.lock();
+						backup_enhanced();
 						peer.shared_access.unlock();
 						break;
 				}
 				break;
 			case "GETCHUNK":
-				switch (header[1]) {
-					case "1.0":
+				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
+					case 0:
 						peer.shared_access.lock();
 						restore();
 						peer.shared_access.unlock();
@@ -64,8 +69,8 @@ public class PeerProtocol implements Runnable {
 				}
 				break;
 			case "DELETE":
-				switch (header[1]) {
-					case "1.0":
+				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
+					case 0:
 						peer.exclusive_access.lock();
 						delete();
 						peer.exclusive_access.unlock();
@@ -73,8 +78,8 @@ public class PeerProtocol implements Runnable {
 				}
 				break;
 			case "REMOVED":
-				switch (header[1]) {
-					case "1.0":
+				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
+					case 0:
 						peer.shared_access.lock();
 						reclaim();
 						peer.shared_access.unlock();
@@ -196,6 +201,68 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void backup() {
+		String chunkID = header[3].toUpperCase() + "." + header[4];
+
+		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
+		putchunk_peers.add(peer.ID);
+
+		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+		                                                   peer.ID, header[3],
+		                                                   Integer.valueOf(header[4]), null);
+
+		if (!peer.remote_chunks_metadata.containsKey(chunkID)) {
+			if (peer.local_chunks_metadata.putIfAbsent(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers)) == null) {
+				if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
+					peer.log.print("\nBackup <- Received PUTCHUNK message:" +
+					               "\n\tSender: " + header[2] +
+					               "\n\tChunk: " + chunkID);
+
+					try {
+						Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
+						            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
+
+					}
+					catch (IOException e) {
+						// Really shouldn't happen, we won't delete the file from the local_chunks_metadata
+						peer.storage_usage.addAndGet(-body.length);
+						return;
+					}
+
+					try {
+						TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(401));
+					}
+					catch (InterruptedException e) {
+						// Shouldn't happen
+					}
+
+					peer.log.print("\nBackup <- Sending STORED message:" +
+					               "\n\tChunk: " + chunkID);
+
+					peer.MCsender.send(stored);
+				}
+				else {
+					peer.local_chunks_metadata.remove(chunkID);
+					peer.storage_usage.addAndGet(-body.length);
+				}
+			}
+			else {
+				try {
+					TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(401));
+				}
+				catch (InterruptedException e) {
+					// Shouldn't happen
+				}
+
+				peer.log.print("\nBackup <- Sending STORED message:" +
+				               "\n\tChunk: " + chunkID);
+
+				peer.MCsender.send(stored);
+			}
+		}
+	}
+
+	private void backup_enhanced() {
+		// TODO
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();

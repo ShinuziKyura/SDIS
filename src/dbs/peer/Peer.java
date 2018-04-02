@@ -1,7 +1,6 @@
 package dbs.peer;
 
 import java.io.IOException;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
@@ -26,7 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static dbs.peer.PeerUtility.*;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
@@ -36,9 +34,8 @@ import dbs.peer.PeerUtility.ChunkMetadata;
 import dbs.nio.channels.MulticastChannel;
 import dbs.rmi.RemoteFunction;
 import dbs.util.concurrent.LinkedTransientQueue;
-//*
 
-//*/
+import static dbs.peer.PeerUtility.*;
 
 public class Peer implements PeerInterface {
 
