@@ -1,7 +1,7 @@
 package dbs.peer;
 
 import java.io.IOException;
-/*
+//*
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -15,6 +15,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.concurrent.locks.Condition;
@@ -33,8 +34,9 @@ import dbs.peer.PeerUtility.ChunkMetadata;
 import dbs.nio.channels.MulticastChannel;
 import dbs.rmi.RemoteFunction;
 import dbs.util.concurrent.LinkedTransientQueue;
-
-//import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
+//*
+import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
+//*/
 
 public class Peer implements PeerInterface {
 
@@ -60,7 +62,7 @@ public class Peer implements PeerInterface {
 							   "\n\t\t<M*_port> is a number between 0 and 65535");
 			System.exit(1);
 		}
-
+		MulticastChannel.LAN = false;
 		Peer peer = new Peer(args[0], Integer.valueOf(args[1]), args[2],
 		                     args[3], Integer.valueOf(args[4]),
 		                     args[5], Integer.valueOf(args[6]),
@@ -104,7 +106,7 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
-		/*
+		//*
 		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "files"));
 		     ObjectInputStream local_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
 		     ObjectInputStream remote_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"));
@@ -113,8 +115,8 @@ public class Peer implements PeerInterface {
 			files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
 			local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) local_chunks_stream.readObject();
 			remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remote_chunks_stream.readObject();
-			total_space = (AtomicLong) total_space_stream.readObject();
-			use_space = (AtomicLong) use_space_stream.readObject();
+			storage_capacity = (AtomicLong) total_space_stream.readObject();
+			storage_usage = (AtomicLong) use_space_stream.readObject();
 		}
 		catch (IOException | ClassNotFoundException e) {
 			System.err.println("\nFAILURE! Couldn't load service metadata" +
@@ -125,8 +127,8 @@ public class Peer implements PeerInterface {
 		files_metadata = new ConcurrentHashMap<>();
 		local_chunks_metadata = new ConcurrentHashMap<>();
 		remote_chunks_metadata = new ConcurrentHashMap<>();
-		total_space = new AtomicLong(Long.MAX_VALUE);
-		use_space = new AtomicLong(0);
+		storage_capacity = new AtomicLong(Long.MAX_VALUE);
+		storage_usage = new AtomicLong(0);
 		//*/
 
 		backup_messages = new ConcurrentHashMap<>();
@@ -204,8 +206,8 @@ public class Peer implements PeerInterface {
 	ConcurrentHashMap<String, ChunkMetadata> local_chunks_metadata;
 	ConcurrentHashMap<String, ChunkMetadata> remote_chunks_metadata;
 
-	AtomicLong total_space;
-	AtomicLong use_space;
+	AtomicLong storage_capacity;
+	AtomicLong storage_usage;
 
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> backup_messages;
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> restore_messages;
@@ -268,7 +270,7 @@ public class Peer implements PeerInterface {
 		log.stop();
 
 		executor.shutdown();
-		/*
+		//*
 		boolean updated_metadata = true;
 		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
 		     ObjectOutputStream local_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
@@ -278,8 +280,8 @@ public class Peer implements PeerInterface {
 			files_stream.writeObject(files_metadata);
 			local_chunks_stream.writeObject(local_chunks_metadata);
 			remote_chunks_stream.writeObject(remote_chunks_metadata);
-			total_space_stream.writeObject(total_space);
-			use_space_stream.writeObject(use_space);
+			total_space_stream.writeObject(storage_capacity);
+			use_space_stream.writeObject(storage_usage);
 		}
 		catch (IOException e) {
 			System.out.println("\nWARNING! Could not store updated metadata");
@@ -321,8 +323,30 @@ public class Peer implements PeerInterface {
 	}
 
 	public String state() {
-		// TODO
-		return "";
+		exclusive_access.lock();
+		StringBuilder state = new StringBuilder("\nFiles:");
+		for (Map.Entry<String, FileMetadata> file : files_metadata.entrySet()) {
+			state.append("\n\tFile name: " + file.getKey() +
+			             "\n\t\tFile ID: " + file.getValue().fileID +
+			             "\n\t\tChunk amount: " + file.getValue().chunk_amount +
+			             "\n\t\tDesired replication degree: " + file.getValue().desired_replication);
+			for (Map.Entry<String, ChunkMetadata> chunk : remote_chunks_metadata.entrySet()) {
+				state.append("\n\t\t\tChunk ID: " + chunk.getKey() +
+				             "\n\t\t\t\tChunk size: " + chunk.getValue().chunk_size +
+				             "\n\t\t\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
+			}
+		}
+		state.append("\nChunks:");
+		for (Map.Entry<String, ChunkMetadata> chunk : local_chunks_metadata.entrySet()) {
+			state.append("\n\tChunk ID: " + chunk.getKey() +
+			             "\n\t\tChunk size: " + chunk.getValue().chunk_size +
+			             "\n\t\tDesired replication degree: " + chunk.getValue().desired_replication +
+			             "\n\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
+		}
+		state.append("\nStorage capacity: " + storage_capacity.get() +
+		             "\nStorage usage: " + storage_usage.get());
+		exclusive_access.unlock();
+		return state.toString();
 	}
 
 	public RemoteFunction backup(String filename, String fileID, byte[] file, int replication_degree) {

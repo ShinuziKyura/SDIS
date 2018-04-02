@@ -67,18 +67,22 @@ public class PeerUtility {
 	public static class FileMetadata {
 		public final String fileID;
 		public final Integer chunk_amount;
+		public final Integer desired_replication;
 
-		public FileMetadata(String fileID, Integer chunk_amount) {
+		public FileMetadata(String fileID, Integer chunk_amount, Integer desired_replication) {
 			this.fileID = fileID;
 			this.chunk_amount = chunk_amount;
+			this.desired_replication = desired_replication;
 		}
 	}
 
 	public static class ChunkMetadata {
+    	public final Integer chunk_size;
 		public final Integer desired_replication;
 		public final Set<String> perceived_replication;
 
-    	public ChunkMetadata(Integer desired_replication, Set<String> perceived_replication) {
+    	public ChunkMetadata(Integer chunk_size, Integer desired_replication, Set<String> perceived_replication) {
+    		this.chunk_size = chunk_size;
     		this.desired_replication = desired_replication;
     		this.perceived_replication = perceived_replication;
 		}

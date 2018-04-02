@@ -40,7 +40,7 @@ public class PeerQueue implements Runnable {
 							if ((messages = peer.reclaim_messages.get(message_header[3].toUpperCase() + "." + message_header[4])) != null) {
 								messages.put(buffer);
 
-								break; // <----- You guys probably won't understand why, but THIS "break;" is the single most brilliant idea ever...
+								break; // <----- You guys probably won't understand why, but this "break" is the single most brilliant idea ever...
 							}
 						}
 						case "GETCHUNK": // MC
