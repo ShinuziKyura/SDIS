@@ -1,7 +1,7 @@
 package dbs.peer;
 
 import java.io.IOException;
-//*
+/*
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -34,7 +34,7 @@ import dbs.nio.channels.MulticastChannel;
 import dbs.rmi.RemoteFunction;
 import dbs.util.concurrent.LinkedTransientQueue;
 
-import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
+//import static dbs.peer.PeerUtility.METADATA_DIRECTORY;
 
 public class Peer implements PeerInterface {
 
@@ -268,7 +268,7 @@ public class Peer implements PeerInterface {
 		log.stop();
 
 		executor.shutdown();
-		//*
+		/*
 		boolean updated_metadata = true;
 		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
 		     ObjectOutputStream local_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));

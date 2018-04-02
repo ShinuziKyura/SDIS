@@ -184,9 +184,9 @@ public class PeerProtocol implements Runnable {
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
-		if (peer.use_space.addAndGet(body.length) <= peer.total_space.get()) {
-			if (!peer.remote_chunks_metadata.containsKey(chunkname) &&
-			    peer.local_chunks_metadata.putIfAbsent(chunkname, new ChunkMetadata(Integer.valueOf(header[5]), putchunk_peers)) == null) {
+		if (!peer.remote_chunks_metadata.containsKey(chunkname) &&
+		    peer.local_chunks_metadata.putIfAbsent(chunkname, new ChunkMetadata(Integer.valueOf(header[5]), putchunk_peers)) == null) {
+			if (peer.use_space.addAndGet(body.length) <= peer.total_space.get()) {
 				try {
 					peer.log.print("\nReceived PUTCHUNK message:" +
 					               "\n\tSender: " + header[2] +
@@ -210,15 +210,18 @@ public class PeerProtocol implements Runnable {
 					} catch (IOException | InterruptedException e) {
 						// Shouldn't happen
 					}
-				} catch (IOException e) {
+				}
+				catch (IOException e) {
 					// File already exists; can't risk corrupting existing files
 					peer.local_chunks_metadata.remove(chunkname);
+					peer.use_space.addAndGet(-body.length);
 				}
 			}
+			else {
+				peer.use_space.addAndGet(-body.length);
+			}
 		}
-		else {
-			peer.use_space.addAndGet(-body.length);
-		}
+
 	}
 
 	static RemoteFunction restore(Peer peer, String filename) {
