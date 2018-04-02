@@ -118,7 +118,7 @@ public class PeerProtocol implements Runnable {
 				try {
 					peer.log.print("\nSending PUTCHUNK message:" +
 					               "\n\tChunk: " + chunkname +
-					               "\n\tAttempt: " + requests + 1);
+					               "\n\tAttempt: " + (requests + 1));
 
 					peer.MDBsocket.send(putchunk);
 				}
@@ -255,7 +255,7 @@ public class PeerProtocol implements Runnable {
 				try {
 					peer.log.print("\nSending GETCHUNK message:" +
 					               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number +
-					               "\n\tAttempt: " + requests + 1);
+					               "\n\tAttempt: " + (requests + 1));
 
 					peer.MCsocket.send(getchunk);
 				}
@@ -369,10 +369,11 @@ public class PeerProtocol implements Runnable {
 
 						peer.log.print("\nSending DELETE message:" +
 						               "\n\tFile: " + filemetadata.fileID +
-						               "\n\tAttempt: " + requests + 2);
+						               "\n\tAttempt: " + (requests + 2));
 
 						peer.MCsocket.send(delete);
-					} catch (IOException | InterruptedException e) {
+					}
+					catch (IOException | InterruptedException e) {
 						// Shouldn't happen
 					}
 				}
@@ -390,6 +391,7 @@ public class PeerProtocol implements Runnable {
 	private void delete() {
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
 				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.([1-9][0-9]{0,5}|0)"));
+
 		if (chunks != null) {
 			peer.log.print("\nReceived DELETE message:" +
 			               "\n\tSender: " + header[2] +
@@ -425,14 +427,15 @@ public class PeerProtocol implements Runnable {
 					if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
 						chunk.delete();
 
-						String[] chunkname = chunk.getName().split("\\.");
+						String[] chunkmetadata = chunk.getName().split("\\.");
 
 						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
-						                                                    peer.ID, chunkname[0],
-						                                                    Integer.valueOf(chunkname[1]), null);
+						                                                    peer.ID, chunkmetadata[0],
+						                                                    Integer.valueOf(chunkmetadata[1]), null);
+
 						try {
 							peer.log.print("\nSending REMOVED message:" +
-							               "\n\tChunk: " + chunkname);
+							               "\n\tChunk: " + chunk.getName());
 
 							peer.MCsocket.send(removed);
 						}
@@ -443,30 +446,31 @@ public class PeerProtocol implements Runnable {
 				}
 			}
 			else {
-				String[] keys = peer.local_chunks_metadata.keySet().toArray(new String[peer.local_chunks_metadata.size()]);
-				Arrays.sort(keys, (s1, s2) -> {
+				String[] chunknames = peer.local_chunks_metadata.keySet().toArray(new String[peer.local_chunks_metadata.size()]);
+				Arrays.sort(chunknames, (s1, s2) -> {
 					ChunkMetadata c1 = peer.local_chunks_metadata.get(s1);
 					ChunkMetadata c2 = peer.local_chunks_metadata.get(s2);
 					return Integer.compare(c2.perceived_replication.size() - c2.desired_replication,
 					                       c1.perceived_replication.size() - c1.desired_replication);
 				});
 
-				for (int chunk = 0; peer.total_space.get() < peer.use_space.get() && chunk < keys.length; ++chunk) {
-					if (peer.local_chunks_metadata.remove(keys[chunk]) != null) {
-						File file = new File(DATA_DIRECTORY + keys[chunk]);
+				for (int n = 0; peer.total_space.get() < peer.use_space.get() && n < chunknames.length; ++n) {
+					if (peer.local_chunks_metadata.remove(chunknames[n]) != null) {
+						File chunk = new File(DATA_DIRECTORY + chunknames[n]);
 
-						peer.use_space.addAndGet(-file.length());
+						peer.use_space.addAndGet(-chunk.length());
 
-						file.delete();
+						chunk.delete();
 
-						String[] chunkname = keys[chunk].split("\\.");
+						String[] chunkmetadata = chunknames[n].split("\\.");
 
 						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
-						                                                    peer.ID, chunkname[0],
-						                                                    Integer.valueOf(chunkname[1]), null);
+						                                                    peer.ID, chunkmetadata[0],
+						                                                    Integer.valueOf(chunkmetadata[1]), null);
+
 						try {
 							peer.log.print("\nSending REMOVED message:" +
-							               "\n\tChunk: " + chunkname);
+							               "\n\tChunk: " + chunknames[n]);
 
 							peer.MCsocket.send(removed);
 						}
@@ -513,7 +517,7 @@ public class PeerProtocol implements Runnable {
 						try {
 							peer.log.print("\nSending PUTCHUNK message:" +
 							               "\n\tChunk: " + chunkname +
-							               "\n\tAttempt: " + requests + 1);
+							               "\n\tAttempt: " + (requests + 1));
 
 							peer.MDBsocket.send(putchunk);
 						} catch (IOException e) {

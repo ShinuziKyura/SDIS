@@ -104,7 +104,7 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
-		//*
+		/*
 		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "files"));
 		     ObjectInputStream local_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
 		     ObjectInputStream remote_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"));
