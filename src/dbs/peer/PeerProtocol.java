@@ -432,7 +432,7 @@ public class PeerProtocol implements Runnable {
 			if (peer.storage_capacity.get() == Long.MAX_VALUE) {
 				for (File chunk : chunks) {
 					if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
-						peer.use_space.addAndGet(-chunk.length());
+						peer.storage_usage.addAndGet(-chunk.length());
 						
 						chunk.delete();
 
