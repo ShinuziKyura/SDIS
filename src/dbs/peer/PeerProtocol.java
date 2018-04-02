@@ -340,7 +340,7 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction delete(Peer peer, String filename) {
-		if (peer.files_metadata.containsKey(filename)) {
+		if (!peer.files_metadata.containsKey(filename)) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
 				                   "\nDELETE protocol terminating...");
@@ -443,7 +443,8 @@ public class PeerProtocol implements Runnable {
 				}
 			}
 			else {
-				String[] keys = (String[]) peer.local_chunks_metadata.keySet().toArray();
+				String[] keys = peer.local_chunks_metadata.keySet().toArray(new String[peer.local_chunks_metadata.size()]);
+				
 				Arrays.sort(keys, (s1, s2) -> {
 					ChunkMetadata c1 = peer.local_chunks_metadata.get(s1);
 					ChunkMetadata c2 = peer.local_chunks_metadata.get(s2);
