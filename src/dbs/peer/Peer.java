@@ -1,7 +1,7 @@
 package dbs.peer;
 
 import java.io.IOException;
-/*
+//*
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -104,15 +104,17 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
-		/*
+		//*
 		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "files"));
 		     ObjectInputStream local_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
 		     ObjectInputStream remote_chunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"));
-		     FileInputStream sizes_stream = new FileInputStream(METADATA_DIRECTORY + "sizes")) {
+		     ObjectInputStream total_space_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "totalspace"));
+		     ObjectInputStream use_space_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "usespace"))) {
 			files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
 			local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) local_chunks_stream.readObject();
 			remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remote_chunks_stream.readObject();
-//			total_space = (AtomicLong) sizes_stream.read()
+			total_space = (AtomicLong) total_space_stream.readObject();
+			use_space = (AtomicLong) use_space_stream.readObject();
 		}
 		catch (IOException | ClassNotFoundException e) {
 			System.err.println("\nFAILURE! Couldn't load service metadata" +
@@ -123,9 +125,9 @@ public class Peer implements PeerInterface {
 		files_metadata = new ConcurrentHashMap<>();
 		local_chunks_metadata = new ConcurrentHashMap<>();
 		remote_chunks_metadata = new ConcurrentHashMap<>();
-		//*/
 		total_space = new AtomicLong(Long.MAX_VALUE);
-		used_space = new AtomicLong(0);
+		use_space = new AtomicLong(0);
+		//*/
 
 		backup_messages = new ConcurrentHashMap<>();
 		restore_messages = new ConcurrentHashMap<>();
@@ -203,7 +205,7 @@ public class Peer implements PeerInterface {
 	ConcurrentHashMap<String, ChunkMetadata> remote_chunks_metadata;
 
 	AtomicLong total_space;
-	AtomicLong used_space;
+	AtomicLong use_space;
 
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> backup_messages;
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> restore_messages;
@@ -266,21 +268,25 @@ public class Peer implements PeerInterface {
 		log.stop();
 
 		executor.shutdown();
-		/*
-		boolean stored_metadata = true;
+		//*
+		boolean updated_metadata = true;
 		try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "files.new"));
 		     ObjectOutputStream local_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "localchunks.new"));
-		     ObjectOutputStream remote_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "remotechunks.new"))) {
+		     ObjectOutputStream remote_chunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "remotechunks.new"));
+		     ObjectOutputStream total_space_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "totalspace.new"));
+		     ObjectOutputStream use_space_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + "usespace.new"))) {
 			files_stream.writeObject(files_metadata);
 			local_chunks_stream.writeObject(local_chunks_metadata);
 			remote_chunks_stream.writeObject(remote_chunks_metadata);
+			total_space_stream.writeObject(total_space);
+			use_space_stream.writeObject(use_space);
 		}
 		catch (IOException e) {
 			System.out.println("\nWARNING! Could not store updated metadata");
-			stored_metadata = false;
+			updated_metadata = false;
 		}
 
-		if (stored_metadata) {
+		if (updated_metadata) {
 			new File(METADATA_DIRECTORY + "files.old").delete();
 			new File(METADATA_DIRECTORY + "files").renameTo(new File(METADATA_DIRECTORY + "files.old"));
 			new File(METADATA_DIRECTORY + "files.new").renameTo(new File(METADATA_DIRECTORY + "files"));
@@ -292,6 +298,14 @@ public class Peer implements PeerInterface {
 			new File(METADATA_DIRECTORY + "remotechunks.old").delete();
 			new File(METADATA_DIRECTORY + "remotechunks").renameTo(new File(METADATA_DIRECTORY + "remotechunks.old"));
 			new File(METADATA_DIRECTORY + "remotechunks.new").renameTo(new File(METADATA_DIRECTORY + "remotechunks"));
+
+			new File(METADATA_DIRECTORY + "totalspace.old").delete();
+			new File(METADATA_DIRECTORY + "totalspace").renameTo(new File(METADATA_DIRECTORY + "totalspace.old"));
+			new File(METADATA_DIRECTORY + "totalspace.new").renameTo(new File(METADATA_DIRECTORY + "totalspace"));
+
+			new File(METADATA_DIRECTORY + "usespace.old").delete();
+			new File(METADATA_DIRECTORY + "usespace").renameTo(new File(METADATA_DIRECTORY + "usespace.old"));
+			new File(METADATA_DIRECTORY + "usespace.new").renameTo(new File(METADATA_DIRECTORY + "usespace"));
 		}
 		//*/
 		System.out.println("\nPeer terminated");

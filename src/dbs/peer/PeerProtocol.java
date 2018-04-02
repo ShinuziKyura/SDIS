@@ -184,7 +184,7 @@ public class PeerProtocol implements Runnable {
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
-		if (peer.used_space.addAndGet(body.length) <= peer.total_space.get()) {
+		if (peer.use_space.addAndGet(body.length) <= peer.total_space.get()) {
 			if (!peer.remote_chunks_metadata.containsKey(chunkname) &&
 			    peer.local_chunks_metadata.putIfAbsent(chunkname, new ChunkMetadata(Integer.valueOf(header[5]), putchunk_peers)) == null) {
 				try {
@@ -217,7 +217,7 @@ public class PeerProtocol implements Runnable {
 			}
 		}
 		else {
-			peer.used_space.addAndGet(-body.length);
+			peer.use_space.addAndGet(-body.length);
 		}
 	}
 
@@ -397,7 +397,7 @@ public class PeerProtocol implements Runnable {
 
 			for (File chunk : chunks) {
 				if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
-					peer.used_space.addAndGet(-chunk.length());
+					peer.use_space.addAndGet(-chunk.length());
 					chunk.delete();
 				}
 			}
@@ -451,11 +451,11 @@ public class PeerProtocol implements Runnable {
 					                       c1.perceived_replication.size() - c1.desired_replication);
 				});
 
-				for (int chunk = 0; peer.total_space.get() < peer.used_space.get() && chunk < keys.length; ++chunk) {
+				for (int chunk = 0; peer.total_space.get() < peer.use_space.get() && chunk < keys.length; ++chunk) {
 					if (peer.local_chunks_metadata.remove(keys[chunk]) != null) {
 						File file = new File(DATA_DIRECTORY + keys[chunk]);
 
-						peer.used_space.addAndGet(-file.length());
+						peer.use_space.addAndGet(-file.length());
 
 						file.delete();
 
