@@ -1,6 +1,7 @@
 package dbs.peer;
 
 import java.io.IOException;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
@@ -105,37 +106,47 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
-
-		//*
-		String files = FILES + (Files.exists(Paths.get(METADATA_DIRECTORY + FILES + NEW)) ? NEW : "");
-		String localchunks = LOCALCHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + LOCALCHUNKS + NEW)) ? NEW : "");
-		String remotechunks = REMOTECHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + REMOTECHUNKS + NEW)) ? NEW : "");
-		String storecap = STORECAP + (Files.exists(Paths.get(METADATA_DIRECTORY + STORECAP + NEW)) ? NEW : "");
-		String storeuse = STOREUSE + (Files.exists(Paths.get(METADATA_DIRECTORY + STOREUSE + NEW)) ? NEW : "");
-
-		try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + files));
-		     ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + localchunks));
-		     ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + remotechunks));
-		     ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storecap));
-		     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storeuse))) {
-			files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
-			local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) localchunks_stream.readObject();
-			remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remotechunks_stream.readObject();
-			storage_capacity = (AtomicLong) storecap_stream.readObject();
-			storage_usage = (AtomicLong) storeuse_stream.readObject();
+		
+		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
+		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
+		
+		if(!new File(DATA_DIRECTORY).exists()) {
+			new File(DATA_DIRECTORY).mkdirs();
 		}
-		catch (IOException | ClassNotFoundException e) {
-			System.err.println("\nFAILURE! Couldn't load service metadata" +
-			                   "\nDistributed Backup Service terminating...");
-			System.exit(1);
+		
+		if(!new File(METADATA_DIRECTORY).exists()) {
+			new File(METADATA_DIRECTORY).mkdirs();
+			
+			files_metadata = new ConcurrentHashMap<>();
+			local_chunks_metadata = new ConcurrentHashMap<>();
+			remote_chunks_metadata = new ConcurrentHashMap<>();
+			storage_capacity = new AtomicLong(Long.MAX_VALUE);
+			storage_usage = new AtomicLong(0);
 		}
-		/*/
-		files_metadata = new ConcurrentHashMap<>();
-		local_chunks_metadata = new ConcurrentHashMap<>();
-		remote_chunks_metadata = new ConcurrentHashMap<>();
-		storage_capacity = new AtomicLong(Long.MAX_VALUE);
-		storage_usage = new AtomicLong(0);
-		//*/
+		else {
+			String files = FILES + (Files.exists(Paths.get(METADATA_DIRECTORY + FILES + NEW)) ? NEW : "");
+			String localchunks = LOCALCHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + LOCALCHUNKS + NEW)) ? NEW : "");
+			String remotechunks = REMOTECHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + REMOTECHUNKS + NEW)) ? NEW : "");
+			String storecap = STORECAP + (Files.exists(Paths.get(METADATA_DIRECTORY + STORECAP + NEW)) ? NEW : "");
+			String storeuse = STOREUSE + (Files.exists(Paths.get(METADATA_DIRECTORY + STOREUSE + NEW)) ? NEW : "");
+
+			try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + files));
+					ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + localchunks));
+					ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + remotechunks));
+					ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storecap));
+					ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storeuse))) {
+				files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
+				local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) localchunks_stream.readObject();
+				remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remotechunks_stream.readObject();
+				storage_capacity = (AtomicLong) storecap_stream.readObject();
+				storage_usage = (AtomicLong) storeuse_stream.readObject();
+			}
+			catch (IOException | ClassNotFoundException e) {
+				System.err.println("\nFAILURE! Couldn't load service metadata" +
+						"\nDistributed Backup Service terminating...");
+				System.exit(1);
+			}
+		}
 
 		backup_messages = new ConcurrentHashMap<>();
 		restore_messages = new ConcurrentHashMap<>();

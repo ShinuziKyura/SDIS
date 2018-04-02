@@ -26,9 +26,9 @@ public class PeerUtility {
 
 	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
 	public static final int MAXIMUM_CHUNK_SIZE = 64000;
-
-	public static String METADATA_DIRECTORY = "src/dbs/peer/metadata/";
-	public static String DATA_DIRECTORY = "src/dbs/peer/data/";
+	
+	public static String METADATA_DIRECTORY = "bin/metadata/";
+	public static String DATA_DIRECTORY = "bin/data/";
 
 	public static final String FILES = "files";
 	public static final String LOCALCHUNKS = "localchunks";
