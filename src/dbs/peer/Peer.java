@@ -349,25 +349,26 @@ public class Peer implements PeerInterface {
 		exclusive_access.lock();
 		StringBuilder state = new StringBuilder("\nFiles:");
 		for (Map.Entry<String, FileMetadata> file : files_metadata.entrySet()) {
-			state.append("\n\tFile name: " + file.getKey() +
-			             "\n\t\tFile ID: " + file.getValue().fileID +
-			             "\n\t\tChunk amount: " + file.getValue().chunk_amount +
-			             "\n\t\tDesired replication degree: " + file.getValue().desired_replication);
+			state.append("\n\tFile name: ").append(file.getKey())
+			     .append("\n\t\tFile ID: ").append(file.getValue().fileID)
+			     .append("\n\t\tChunk amount: ").append(file.getValue().chunk_amount)
+			     .append("\n\t\tDesired replication degree: ").append(file.getValue().desired_replication);
 			for (Map.Entry<String, ChunkMetadata> chunk : remote_chunks_metadata.entrySet()) {
-				state.append("\n\t\t\tChunk ID: " + chunk.getKey() +
-				             "\n\t\t\t\tChunk size: " + chunk.getValue().chunk_size + "B" +
-				             "\n\t\t\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
+				state.append("\n\t\t\tChunk ID: ").append(chunk.getKey())
+				     .append("\n\t\t\t\tChunk size: ").append(chunk.getValue().chunk_size).append(" B")
+				     .append("\n\t\t\t\tPerceived replication degree: ").append(chunk.getValue().perceived_replication.size());
 			}
 		}
 		state.append("\nChunks:");
 		for (Map.Entry<String, ChunkMetadata> chunk : local_chunks_metadata.entrySet()) {
-			state.append("\n\tChunk ID: " + chunk.getKey() +
-			             "\n\t\tChunk size: " + chunk.getValue().chunk_size + "B" +
-			             "\n\t\tDesired replication degree: " + chunk.getValue().desired_replication +
-			             "\n\t\tPerceived replication degree: " + chunk.getValue().perceived_replication);
+			state.append("\n\tChunk ID: ").append(chunk.getKey())
+			     .append("\n\t\tChunk size: ").append(chunk.getValue().chunk_size).append(" B")
+			     .append("\n\t\tDesired replication degree: ").append(chunk.getValue().desired_replication)
+			     .append("\n\t\tPerceived replication degree: ").append(chunk.getValue().perceived_replication.size());
 		}
-		state.append("\nStorage capacity: " + storage_capacity.get() + "B" +
-		             "\nStorage usage: " + storage_usage.get() + "B");
+		Long capacity = storage_capacity.get();
+		state.append("\nStorage capacity: ").append((capacity != Long.MAX_VALUE ? capacity.toString().concat(" B") : "No limit"))
+		     .append("\nStorage usage: ").append(storage_usage.get()).append(" B");
 		exclusive_access.unlock();
 		return state.toString();
 	}

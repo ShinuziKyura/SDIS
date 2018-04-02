@@ -103,18 +103,18 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 
-		int body_length;
+		int chunk_size;
 		int chunk_number = 0;
 		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
 		do {
 			String chunkID = fileID + "." + chunk_number;
-			body_length = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
-			              (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
-			              file.length;
+			chunk_size = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
+			             (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
+			             file.length;
 			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
 			                                                            peer.ID, fileID,
 			                                                            chunk_number, replication_degree);
-			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, body_length);
+			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, chunk_size);
 			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
 
 			Set<String> stored_peers = ConcurrentHashMap.newKeySet();
@@ -170,7 +170,7 @@ public class PeerProtocol implements Runnable {
 		peer.files_metadata.put(filename, new FileMetadata(fileID, chunk_amount, replication_degree));
 		for (Map.Entry<String, Set<String>> csp : chunks_stored_peers.entrySet()) {
 			peer.remote_chunks_metadata.put(csp.getKey(), new ChunkMetadata(
-					!csp.getKey().split("\\.")[1].equals(chunk_amount - 1) ? file.length : body_length,
+					!csp.getKey().split("\\.")[1].equals(chunk_amount - 1) ? MAXIMUM_CHUNK_SIZE : chunk_size,
 					replication_degree,
 					csp.getValue()));
 		}

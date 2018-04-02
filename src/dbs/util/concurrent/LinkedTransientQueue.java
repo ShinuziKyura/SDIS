@@ -52,12 +52,7 @@ public class LinkedTransientQueue<E> extends LinkedTransferQueue<E> {
 		long poll_duration = this.duration - (System.nanoTime() - time);
 		if (poll_duration > 0) {
 			try {
-				if (duration < poll_duration) {
-					e = super.poll(duration, TimeUnit.NANOSECONDS);
-				}
-				else {
-					e = super.poll(poll_duration, TimeUnit.NANOSECONDS);
-				}
+				e = super.poll(duration < poll_duration ? duration : poll_duration, TimeUnit.NANOSECONDS);
 			}
 			catch (InterruptedException ee) {
 				return null;
@@ -68,6 +63,7 @@ public class LinkedTransientQueue<E> extends LinkedTransferQueue<E> {
 
 	public void clear(long duration, TimeUnit unit) {
 		super.clear();
+
 		switch (unit) {
 			case DAYS:
 				duration *= 24;

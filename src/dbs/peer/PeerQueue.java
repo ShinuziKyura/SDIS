@@ -6,15 +6,17 @@ import dbs.util.concurrent.LinkedTransientQueue;
 
 import dbs.peer.PeerUtility.ChunkMetadata;
 
+import static dbs.nio.channels.DatagramChannel.BUFFER_SIZE;
+
 public class PeerQueue implements Runnable {
 	private Peer peer;
 	private LinkedTransferQueue<byte[]> queue;
+	private static final ChannelQueue check = new ChannelQueue();
 
 	static final class ChannelQueue {
 		private ChannelQueue() {
 		}
 	}
-	private static final ChannelQueue check = new ChannelQueue();
 
 	PeerQueue(Peer peer, PeerChannel channel) {
 		this.peer = peer;
@@ -27,7 +29,7 @@ public class PeerQueue implements Runnable {
 			try {
 				byte[] buffer = queue.take();
 
-				if (new String(buffer).equals("STOP")) {
+				if (buffer.length == BUFFER_SIZE + 1) {
 					break;
 				}
 
@@ -106,6 +108,7 @@ public class PeerQueue implements Runnable {
 
 	void stop() {
 		queue.clear();
-		queue.put("STOP".getBytes());
+
+		queue.put(new byte[BUFFER_SIZE + 1]);
 	}
 }

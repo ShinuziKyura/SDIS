@@ -43,6 +43,7 @@ public class PeerChannel implements Runnable {
 
 	LinkedTransferQueue<byte[]> queue(PeerQueue.ChannelQueue check) {
 		check.getClass();
+
 		return queue;
 	}
 }
