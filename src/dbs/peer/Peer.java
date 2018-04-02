@@ -102,7 +102,7 @@ public class Peer implements PeerInterface {
 		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
 		ACCESS_POINT = access_point;
 
-		lock = new ReentrantReadWriteLock();
+		ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 		condition = lock.writeLock().newCondition();
 
 		exclusive_access = lock.writeLock();
@@ -112,7 +112,7 @@ public class Peer implements PeerInterface {
 		     ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "localchunks"));
 		     ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "remotechunks"));
 		     ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "storecap"));
-		     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "storeuse"))) {
+		     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + "storeuse"))) { // TODO Enhancement: try to open any .new files if they exist
 			files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
 			local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) localchunks_stream.readObject();
 			remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remotechunks_stream.readObject();
@@ -136,30 +136,38 @@ public class Peer implements PeerInterface {
 		restore_messages = new ConcurrentHashMap<>();
 		reclaim_messages = new ConcurrentHashMap<>();
 
-		MCsocket = new MulticastChannel(MC_address, MC_port);
-		MDBsocket = new MulticastChannel(MDB_address, MDB_port);
-		MDRsocket = new MulticastChannel(MDR_address, MDR_port);
+		MCchannel = new MulticastChannel(MC_address, MC_port);
+		MDBchannel = new MulticastChannel(MDB_address, MDB_port);
+		MDRchannel = new MulticastChannel(MDR_address, MDR_port);
 
-		MCchannel = new PeerChannel(this, MCsocket);
-		MDBchannel = new PeerChannel(this, MDBsocket);
-		MDRchannel = new PeerChannel(this, MDRsocket);
+		MCsender = new PeerSender(this, MCchannel);
+		MDBsender = new PeerSender(this, MDBchannel);
+		MDRsender = new PeerSender(this, MDRchannel);
 
-		MCqueue = new PeerQueue(this, MCchannel);
-		MDBqueue = new PeerQueue(this, MDBchannel);
-		MDRqueue = new PeerQueue(this, MDRchannel);
+		MCreceiver = new PeerReceiver(this, MCchannel);
+		MDBreceiver = new PeerReceiver(this, MDBchannel);
+		MDRreceiver = new PeerReceiver(this, MDRchannel);
+
+		MCdispatcher = new PeerDispatcher(this, MCreceiver);
+		MDBdispatcher = new PeerDispatcher(this, MDBreceiver);
+		MDRdispatcher = new PeerDispatcher(this, MDRreceiver);
 
 		log = new PeerLog(this);
 
 		running = new AtomicBoolean(true);
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
-		executor.execute(MCchannel);
-		executor.execute(MDBchannel);
-		executor.execute(MDRchannel);
+		executor.execute(MCsender);
+		executor.execute(MDBsender);
+		executor.execute(MDRsender);
 
-		executor.execute(MCqueue);
-		executor.execute(MDBqueue);
-		executor.execute(MDRqueue);
+		executor.execute(MCreceiver);
+		executor.execute(MDBreceiver);
+		executor.execute(MDRreceiver);
+
+		executor.execute(MCdispatcher);
+		executor.execute(MDBdispatcher);
+		executor.execute(MDRdispatcher);
 
 		executor.execute(log);
 
@@ -197,7 +205,6 @@ public class Peer implements PeerInterface {
 	 ***** Member variables *****************************************************************************
 	 ***************************************************************************************************/
 
-	private ReentrantReadWriteLock lock;
 	private Condition condition;
 
 	WriteLock exclusive_access;
@@ -214,17 +221,21 @@ public class Peer implements PeerInterface {
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> restore_messages;
 	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> reclaim_messages;
 
-	MulticastChannel MCsocket;
-	MulticastChannel MDBsocket;
-	MulticastChannel MDRsocket;
+	MulticastChannel MCchannel;
+	MulticastChannel MDBchannel;
+	MulticastChannel MDRchannel;
 
-	private PeerChannel MCchannel;
-	private PeerChannel MDBchannel;
-	private PeerChannel MDRchannel;
+	PeerSender MCsender;
+	PeerSender MDBsender;
+	PeerSender MDRsender;
 
-	private PeerQueue MCqueue;
-	private PeerQueue MDBqueue;
-	private PeerQueue MDRqueue;
+	private PeerReceiver MCreceiver;
+	private PeerReceiver MDBreceiver;
+	private PeerReceiver MDRreceiver;
+
+	private PeerDispatcher MCdispatcher;
+	private PeerDispatcher MDBdispatcher;
+	private PeerDispatcher MDRdispatcher;
 
 	PeerLog log;
 
@@ -282,13 +293,22 @@ public class Peer implements PeerInterface {
 			e.printStackTrace();
 		}
 
-		MCchannel.stop();
-		MDBchannel.stop();
-		MDRchannel.stop();
+		try {
+			MCchannel.close();
+			MDBchannel.close();
+			MDRchannel.close();
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
 
-		MCqueue.stop();
-		MDBqueue.stop();
-		MDRqueue.stop();
+		MCsender.stop();
+		MDBsender.stop();
+		MDRsender.stop();
+
+		MCreceiver.stop();
+		MDBreceiver.stop();
+		MDRreceiver.stop();
 
 		log.stop();
 

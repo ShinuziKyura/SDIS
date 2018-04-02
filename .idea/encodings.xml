@@ -10,5 +10,11 @@
     <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/remotechunks.new" charset="ISO-8859-1" />
     <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/remotechunks" charset="ISO-8859-1" />
     <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/remotechunks.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storecap.new" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storecap" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storecap.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storeuse.new" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storeuse" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storeuse.old" charset="ISO-8859-1" />
   </component>
 </project>

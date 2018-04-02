@@ -79,8 +79,4 @@ public class DatagramChannel {
 	public void close() throws IOException {
 		this.socket.close();
 	}
-
-	public boolean isClosed() {
-		return this.socket.isClosed();
-	}
 }
