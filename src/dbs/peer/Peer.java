@@ -130,24 +130,8 @@ public class Peer implements PeerInterface {
 	            String MDB_address, int MDB_port,
 	            String MDR_address, int MDR_port) throws IOException {
 		System.out.println("\nInitializing peer...");
-		/* Single-comment this line to switch to Cool-Mode™
-		NetworkInterface net_int = MainInterface.find();
-		if (net_int != null) {
-			byte[] hw_addr = net_int.getHardwareAddress();
-			ID = String.format("%02x%02x%02x%02x%02x%02x@",
-			                   hw_addr[0], hw_addr[1], hw_addr[2],
-			                   hw_addr[3], hw_addr[4], hw_addr[5])
-			           .concat(Long.toString(ProcessHandle.current().pid()));
-		}
-		else {
-			System.err.println("\nFAILURE! Could not establish a connection through any available interface" +
-			                   "\nDistributed Backup Service terminating...");
-			System.exit(1);
-			ID = null; // Placebo: So the compiler stops barking at us
-		}
-		/*/
+	
 		ID = Integer.toString(id);
-		//*/
 		PROTOCOL_VERSION = new ProtocolVersion(protocol_version);
 		ACCESS_POINT = access_point;
 
