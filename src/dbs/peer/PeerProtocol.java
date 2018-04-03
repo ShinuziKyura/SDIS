@@ -37,8 +37,6 @@ public class PeerProtocol implements Runnable {
 	private String[] header;
 	private byte[] body;
 	private InetAddress address;
-	private ProtocolVersion message_version;
-	private ProtocolVersion minimum_version;
 
 	PeerProtocol(Peer peer, byte[] message) {
 		this.peer = peer;
@@ -48,9 +46,6 @@ public class PeerProtocol implements Runnable {
 
 		byte[] body = GenericArrays.split(message, header.getBytes().length)[1];
 		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
-
-		message_version = new ProtocolVersion(this.header[1]);
-		minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
 	}
 
 	PeerProtocol(Peer peer, DatagramPackage message) {
@@ -63,13 +58,13 @@ public class PeerProtocol implements Runnable {
 		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
 
 		this.address = message.address;
-
-		message_version = new ProtocolVersion(this.header[1]);
-		minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
 	}
 
 	@Override
 	public void run() {
+		ProtocolVersion message_version = new ProtocolVersion(this.header[1]);
+		ProtocolVersion minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
+
 		if (message_version != minimum_version) {
 			// Ours is the minimum version, can't process message
 			peer.log.print("\nReceived " + header[0] + " message:" +
@@ -171,7 +166,7 @@ public class PeerProtocol implements Runnable {
 			chunk_size = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
 			             (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
 			             file.length;
-			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
+			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, new ProtocolVersion("1.0"),
 			                                                            peer.ID, fileID,
 			                                                            chunk_number, replication_degree);
 			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, chunk_size);
@@ -239,13 +234,124 @@ public class PeerProtocol implements Runnable {
 		}, new Object[]{ warnings });
 	}
 
+	static RemoteFunction initiator_backup_enhanced(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
+		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
+				                   "\nBACKUP protocol terminating...");
+				return 11;
+			});
+		}
+		if (replication_degree < 1 || replication_degree > 9) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Replication degree must be greater than 0 and less than 10" +
+				                   "\nBACKUP protocol terminating...");
+				return 12;
+			});
+		}
+		if (peer.files_metadata.containsKey(filename)) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File already exists in the service metadata" +
+				                   "\nBACKUP protocol terminating...");
+				return 13;
+			});
+		}
+
+		LinkedList<String> warnings = new LinkedList<>();
+		LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
+		LinkedHashMap<String, Set<String>> chunks_stored_peers = new LinkedHashMap<>();
+
+		if (peer.backup_messages.putIfAbsent(fileID, messages) != null) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Backup protocol already running for this file" +
+				                   "\nBACKUP protocol terminating...");
+				return 14;
+			});
+		}
+
+		int chunk_size;
+		int chunk_number = 0;
+		int chunk_amount = file.length / MAXIMUM_CHUNK_SIZE + 1;
+		do {
+			String chunkID = fileID + "." + chunk_number;
+			chunk_size = (chunk_number + 1) * MAXIMUM_CHUNK_SIZE < file.length ?
+			             (chunk_number + 1) * MAXIMUM_CHUNK_SIZE :
+			             file.length;
+			byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, new ProtocolVersion("1.1"),
+			                                                            peer.ID, fileID,
+			                                                            chunk_number, replication_degree);
+			byte[] putchunk_body = Arrays.copyOfRange(file, chunk_number * MAXIMUM_CHUNK_SIZE, chunk_size);
+			byte[] putchunk = GenericArrays.join(putchunk_header, putchunk_body);
+
+			Set<String> stored_peers = ConcurrentHashMap.newKeySet();
+
+			int requests = 0;
+			while (stored_peers.size() < replication_degree && requests < 5) {
+				peer.log.print("\nBackup -> Sending PUTCHUNK message:" +
+				               "\n\tChunk: " + chunkID +
+				               "\n\tAttempt: " + (requests + 1));
+
+				peer.MDBsender.send(putchunk);
+
+				byte[] stored;
+				messages.clear((1 << requests++), TimeUnit.SECONDS);
+				while ((stored = messages.poll()) != null) {
+					String[] stored_header = new String(stored).split("[ ]+");
+
+					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) &&
+					    stored_peers.add(stored_header[2])) {
+						peer.log.print("\nBackup -> Received STORED message:" +
+						               "\n\tSender: " + stored_header[2] +
+						               "\n\tChunk: " + chunkID);
+					}
+				}
+			}
+			if (stored_peers.size() == 0) {
+				break;
+			}
+			else if (stored_peers.size() < replication_degree) {
+				warnings.add("\nWARNING! Replication degree of chunk " + chunk_number + " may be lower than requested:" +
+				             "\n\tDesired - " + replication_degree +
+				             "\n\tPerceived - " + stored_peers.size());
+			}
+
+			chunks_stored_peers.put(chunkID, stored_peers);
+		} while (++chunk_number < chunk_amount);
+
+		peer.backup_messages.remove(fileID);
+
+		if (chunk_number != chunk_amount) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Chunk " + args[0] + " could not be stored" +
+				                   "\nBACKUP protocol terminating...");
+				return 15;
+			}, new Object[]{ chunk_number });
+		}
+
+		peer.files_metadata.put(filename, new FileMetadata(fileID, chunk_amount, replication_degree));
+		for (Map.Entry<String, Set<String>> csp : chunks_stored_peers.entrySet()) {
+			peer.remote_chunks_metadata.put(csp.getKey(), new ChunkMetadata(
+					!csp.getKey().split("\\.")[1].equals(chunk_amount - 1) ? MAXIMUM_CHUNK_SIZE : chunk_size,
+					replication_degree,
+					csp.getValue()));
+		}
+
+		return new RemoteFunction<>((args) -> {
+			for (String arg : (LinkedList<String>) args[0]) {
+				System.out.println(arg);
+			}
+			System.out.println("\nSUCCESS! File stored");
+			return 0;
+		}, new Object[]{ warnings });
+	}
+
 	private void backup() {
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
-		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
+		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.0"),
 		                                                   peer.ID, header[3],
 		                                                   Integer.valueOf(header[4]), null);
 
@@ -344,7 +450,7 @@ public class PeerProtocol implements Runnable {
 
 						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
 
-						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
+						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.1"),
 						                                            peer.ID, header[3],
 						                                            Integer.valueOf(header[4]), null);
 
@@ -369,7 +475,7 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-				stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
+				stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.1"),
 			                                                peer.ID, header[3],
 			                                                Integer.valueOf(header[4]), null);
 
@@ -406,7 +512,7 @@ public class PeerProtocol implements Runnable {
 		byte[] chunk;
 		int chunk_number = 0;
 		do {
-			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
+			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, new ProtocolVersion("1.0"),
 			                                                     peer.ID, filemetadata.fileID,
 			                                                     chunk_number, null);
 
@@ -475,7 +581,7 @@ public class PeerProtocol implements Runnable {
 		byte[] chunk = null;
 		int chunk_number = 0;
 		do {
-			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
+			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, new ProtocolVersion("1.1"),
 			                                                     peer.ID, filemetadata.fileID,
 			                                                     chunk_number, null);
 
@@ -543,7 +649,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, minimum_version,
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, new ProtocolVersion("1.0"),
 				                                                         peer.ID, header[3].toUpperCase(),
 				                                                         Integer.valueOf(header[4]), null);
 				byte[] chunk_body = Files.readAllBytes(pathname);
@@ -574,7 +680,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, minimum_version,
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, new ProtocolVersion("1.1"),
 				                                                         peer.ID, header[3].toUpperCase(),
 				                                                         Integer.valueOf(header[4]), null);
 				byte[] chunk_body = Files.readAllBytes(pathname);
@@ -618,7 +724,7 @@ public class PeerProtocol implements Runnable {
 					peer.remote_chunks_metadata.remove(filemetadata.fileID + "." + chunk_number);
 				}
 
-				byte[] delete = PeerUtility.generateProtocolHeader(MessageType.DELETE, peer.PROTOCOL_VERSION,
+				byte[] delete = PeerUtility.generateProtocolHeader(MessageType.DELETE, new ProtocolVersion("1.0"),
 				                                                   peer.ID, filemetadata.fileID,
 				                                                   null, null);
 
@@ -693,7 +799,7 @@ public class PeerProtocol implements Runnable {
 
 						String[] chunkmetadata = chunk.getName().split("\\.");
 
-						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
+						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, new ProtocolVersion("1.0"),
 						                                                    peer.ID, chunkmetadata[0],
 						                                                    Integer.valueOf(chunkmetadata[1]), null);
 
@@ -724,7 +830,7 @@ public class PeerProtocol implements Runnable {
 
 						String[] chunkmetadata = chunkIDs[n].split("\\.");
 
-						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, peer.PROTOCOL_VERSION,
+						byte[] removed = PeerUtility.generateProtocolHeader(MessageType.REMOVED, new ProtocolVersion("1.0"),
 						                                                    peer.ID, chunkmetadata[0],
 						                                                    Integer.valueOf(chunkmetadata[1]), null);
 
@@ -759,7 +865,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, minimum_version,
+				byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, new ProtocolVersion("1.0"),
 				                                                            peer.ID, header[3].toUpperCase(),
 				                                                            Integer.valueOf(header[4]), chunkmetadata.desired_replication);
 				byte[] putchunk_body = Files.readAllBytes(pathname);
@@ -810,6 +916,13 @@ public class PeerProtocol implements Runnable {
 		return new RemoteFunction<>((args) -> {
 			System.err.println("\nFAILURE! Peer process is stopping" +
 			                   "\nDistributed Backup Service terminating...");
+			return 1;
+		});
+	}
+
+	static RemoteFunction failure_enhanced() {
+		return new RemoteFunction<>((args) -> {
+			System.err.println("\nFAILURE! Protocol version not supported");
 			return 1;
 		});
 	}

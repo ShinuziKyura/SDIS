@@ -72,6 +72,56 @@ public class Peer implements PeerInterface {
 	}
 
 	/***************************************************************************************************
+	***** Member constants *****************************************************************************
+	***************************************************************************************************/
+
+	final String ID;
+	final ProtocolVersion PROTOCOL_VERSION;
+	final String ACCESS_POINT;
+
+	/***************************************************************************************************
+	 ***** Member variables *****************************************************************************
+	 ***************************************************************************************************/
+
+	private Condition condition;
+
+	WriteLock exclusive_access;
+	ReadLock shared_access;
+
+	ConcurrentHashMap<String, FileMetadata> files_metadata;
+	ConcurrentHashMap<String, ChunkMetadata> local_chunks_metadata;
+	ConcurrentHashMap<String, ChunkMetadata> remote_chunks_metadata;
+
+	AtomicLong storage_capacity;
+	AtomicLong storage_usage;
+
+	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> backup_messages;
+	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> restore_messages;
+	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> reclaim_messages;
+
+	MulticastChannel MCchannel;
+	MulticastChannel MDBchannel;
+	MulticastChannel MDRchannel;
+
+	PeerSender MCsender;
+	PeerSender MDBsender;
+	PeerSender MDRsender;
+
+	private PeerReceiver MCreceiver;
+	private PeerReceiver MDBreceiver;
+	private PeerReceiver MDRreceiver;
+
+	private PeerDispatcher MCdispatcher;
+	private PeerDispatcher MDBdispatcher;
+	private PeerDispatcher MDRdispatcher;
+
+	PeerLog log;
+
+	AtomicBoolean running;
+	ThreadPoolExecutor executor;
+
+
+	/***************************************************************************************************
 	***** Constructor **********************************************************************************
 	***************************************************************************************************/
 
@@ -93,7 +143,7 @@ public class Peer implements PeerInterface {
 			System.err.println("\nFAILURE! Could not establish a connection through any available interface" +
 			                   "\nDistributed Backup Service terminating...");
 			System.exit(1);
-			this.ID = null; // Placebo: So the compiler stops barking at us
+			ID = null; // Placebo: So the compiler stops barking at us
 		}
 		/*/
 		ID = Integer.toString(id);
@@ -106,7 +156,7 @@ public class Peer implements PeerInterface {
 
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
-		
+
 		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
 		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
 
@@ -148,7 +198,7 @@ public class Peer implements PeerInterface {
 		}
 		else {
 			System.err.println("\nFAILURE! Service files missing" +
-					"\nDistributed Backup Service terminating...");
+			                   "\nDistributed Backup Service terminating...");
 			System.exit(1);
 		}
 
@@ -212,55 +262,6 @@ public class Peer implements PeerInterface {
 		                   "\n\tProtocol version: " + PROTOCOL_VERSION +
 		                   "\n\tAccess point: " + ACCESS_POINT);
 	}
-
-	/***************************************************************************************************
-	***** Member constants *****************************************************************************
-	***************************************************************************************************/
-
-	final String ID;
-	final ProtocolVersion PROTOCOL_VERSION;
-	final String ACCESS_POINT;
-
-	/***************************************************************************************************
-	 ***** Member variables *****************************************************************************
-	 ***************************************************************************************************/
-
-	private Condition condition;
-
-	WriteLock exclusive_access;
-	ReadLock shared_access;
-
-	ConcurrentHashMap<String, FileMetadata> files_metadata;
-	ConcurrentHashMap<String, ChunkMetadata> local_chunks_metadata;
-	ConcurrentHashMap<String, ChunkMetadata> remote_chunks_metadata;
-
-	AtomicLong storage_capacity;
-	AtomicLong storage_usage;
-
-	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> backup_messages;
-	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> restore_messages;
-	ConcurrentHashMap<String, LinkedTransientQueue<byte[]>> reclaim_messages;
-
-	MulticastChannel MCchannel;
-	MulticastChannel MDBchannel;
-	MulticastChannel MDRchannel;
-
-	PeerSender MCsender;
-	PeerSender MDBsender;
-	PeerSender MDRsender;
-
-	private PeerReceiver MCreceiver;
-	private PeerReceiver MDBreceiver;
-	private PeerReceiver MDRreceiver;
-
-	private PeerDispatcher MCdispatcher;
-	private PeerDispatcher MDBdispatcher;
-	private PeerDispatcher MDRdispatcher;
-
-	PeerLog log;
-
-	AtomicBoolean running;
-	ThreadPoolExecutor executor;
 
 	/***************************************************************************************************
 	***** Member functions *****************************************************************************
@@ -400,47 +401,96 @@ public class Peer implements PeerInterface {
 	}
 
 	public RemoteFunction backup(String filename, String fileID, byte[] file, int replication_degree) {
-		shared_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_backup(this, filename, fileID, file, replication_degree) :
-		                         PeerProtocol.failure());
-		shared_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+			case "1.1":
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_backup(this, filename, fileID, file, replication_degree) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+		}
+		return result;
+	}
+
+	public RemoteFunction backup_enhanced(String filename, String fileID, byte[] file, int replication_degree) {
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+				result = PeerProtocol.failure_enhanced();
+				break;
+			case "1.1":
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_backup_enhanced(this, filename, fileID, file, replication_degree) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+		}
 		return result;
 	}
 
 	public RemoteFunction restore(String filename) {
-		shared_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_restore(this, filename) :
-		                         PeerProtocol.failure());
-		shared_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+			case "1.1":
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_restore(this, filename) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+		}
 		return result;
 	}
 
 	public RemoteFunction restore_enhanced(String filename) {
-		exclusive_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_restore_enhanced(this, filename) :
-		                         PeerProtocol.failure());
-		exclusive_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+				result = PeerProtocol.failure_enhanced();
+				break;
+			case "1.1":
+				exclusive_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_restore_enhanced(this, filename) :
+				          PeerProtocol.failure());
+				exclusive_access.unlock();
+				break;
+		}
 		return result;
 	}
 
 	public RemoteFunction delete(String filename) {
-		shared_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_delete(this, filename) :
-		                         PeerProtocol.failure());
-		shared_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+			case "1.1":
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_delete(this, filename) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+		}
 		return result;
 	}
 
 	public RemoteFunction reclaim(long disk_space) {
-		shared_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_reclaim(this, disk_space) :
-		                         PeerProtocol.failure());
-		shared_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.toString()) {
+			case "1.0":
+			case "1.1":
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_reclaim(this, disk_space) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+		}
 		return result;
 	}
 }
