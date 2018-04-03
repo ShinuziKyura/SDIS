@@ -124,8 +124,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_backup(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
-		System.out.println("static default backup");
-		
 		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -237,7 +235,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_backup_enhanced(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
-		System.out.println("static enh backup");
 		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -349,7 +346,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void backup() {
-		System.out.println("default backup");
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
@@ -411,7 +407,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void backup_enhanced() {
-		System.out.println("enh backup");
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
@@ -420,6 +415,7 @@ public class PeerProtocol implements Runnable {
 		LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
 
 		byte[] stored;
+		byte[] message;
 		if (!peer.remote_chunks_metadata.containsKey(chunkID)) {
 			if (!peer.local_chunks_metadata.containsKey(chunkID)) {
 				if (peer.backup_messages.putIfAbsent(chunkID, messages) == null) {
@@ -427,20 +423,24 @@ public class PeerProtocol implements Runnable {
 						peer.log.print("\nBackup <- Received PUTCHUNK message:" +
 						               "\n\tSender: " + header[2] +
 						               "\n\tChunk: " + chunkID);
+						
+						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.1"),
+                                peer.ID, header[3],
+                                Integer.valueOf(header[4]), null);
 
 						int desired_replication = Integer.valueOf(header[5]);
-						messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
-						while ((stored = messages.poll()) != null) {
-							String sender = new String(stored).split("[ ]+")[2];
+						messages.clear(ThreadLocalRandom.current().nextInt(8), TimeUnit.SECONDS);
+						while ((message = messages.poll()) != null) {
+							String sender = new String(message).split("[ ]+")[2];
 							putchunk_peers.add(sender);
-
-							if (putchunk_peers.size() >= desired_replication) {
+							
+							if (putchunk_peers.size() > desired_replication) {
 								peer.storage_usage.addAndGet(-body.length);
 								peer.backup_messages.remove(chunkID);
 								return;
 							}
 						}
-
+						
 						try {
 							Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
 							            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
@@ -453,16 +453,12 @@ public class PeerProtocol implements Runnable {
 							return;
 						}
 
-						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
-
-						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.1"),
-						                                            peer.ID, header[3],
-						                                            Integer.valueOf(header[4]), null);
-
-						peer.log.print("\nBackup <- Sending STORED message:" +
-						               "\n\tChunk: " + chunkID);
-
 						peer.MCsender.send(stored);
+						
+						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
+						
+						peer.log.print("\nBackup <- Sending STORED message:" +
+					               "\n\tChunk: " + chunkID);
 
 						peer.backup_messages.remove(chunkID);
 					}
@@ -493,7 +489,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_restore(Peer peer, String filename) {
-		System.out.println("static default restore");
 		FileMetadata filemetadata;
 		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			return new RemoteFunction<>((args) -> {
@@ -566,20 +561,12 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_restore_enhanced(Peer peer, String filename) {
-		System.out.println("static enh restore");
 		FileMetadata filemetadata;
 		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
 				                   "\nRESTORE protocol terminating...");
 				return 21;
-			});
-		}
-		if (peer.backup_messages.containsKey(filemetadata.fileID)) {
-			return new RemoteFunction<>((args) -> {
-				System.err.println("\nFAILURE! File is being backed up by this service" +
-				                   "\nRESTORE protocol terminating...");
-				return 22;
 			});
 		}
 
@@ -613,13 +600,13 @@ public class PeerProtocol implements Runnable {
 
 				try {
 					
-					server_socket.setSoTimeout((1 << requests) * 1000);
+					server_socket.setSoTimeout(1000 << requests);
 					peer.MCsender.send(getchunk);
 					
 					do{
 						Socket socket=server_socket.accept();
 
-						socket.setSoTimeout((1 << requests) * 1000);
+						socket.setSoTimeout(1000 << requests);
 
 						chunk = socket.getInputStream().readAllBytes();
 
@@ -639,7 +626,6 @@ public class PeerProtocol implements Runnable {
 					while(!received_chunk);
 				}
 				catch (IOException e) {
-					peer.log.print("Timeout");
 				}
 				++requests;
 			}
@@ -665,7 +651,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void restore() {
-		System.out.println("default restore");
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
 
@@ -699,7 +684,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void restore_enhanced() {
-		System.out.println("enh restore");
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
 
@@ -733,7 +717,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_delete(Peer peer, String filename) {
-		System.out.println("static default delete");
 		if (!peer.files_metadata.containsKey(filename)) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File does not exist in this service metadata" +
@@ -783,7 +766,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void delete() {
-		System.out.println("default delete");
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
 				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.([1-9][0-9]{0,5}|0)"));
 
@@ -802,7 +784,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	static RemoteFunction initiator_reclaim(Peer peer, long disk_space) {
-		System.out.println("static default reclaim");
 		File[] chunks = new File(DATA_DIRECTORY).listFiles(
 				(dir, name) -> name.matches("[0-9A-F]{64}\\.([1-9][0-9]{0,5}|0)"));
 
@@ -881,7 +862,6 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void reclaim() {
-		System.out.println("default reclaim");
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
 
