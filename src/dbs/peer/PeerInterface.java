@@ -14,6 +14,8 @@ public interface PeerInterface extends Remote {
 
     RemoteFunction restore(String filename) throws RemoteException;
 
+    RemoteFunction restore_enhanced(String filename) throws RemoteException;
+
     RemoteFunction delete(String filename) throws RemoteException;
 
     RemoteFunction reclaim(long disk_space) throws RemoteException;

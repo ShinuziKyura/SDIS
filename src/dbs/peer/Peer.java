@@ -409,23 +409,20 @@ public class Peer implements PeerInterface {
 	}
 
 	public RemoteFunction restore(String filename) {
-		RemoteFunction result = null;
-		switch (PROTOCOL_VERSION.MINOR_NUMBER) {
-			case 0:
-				shared_access.lock();
-				result = (running.get() ?
-				          PeerProtocol.initiator_restore(this, filename) :
-				          PeerProtocol.failure());
-				shared_access.unlock();
-				break;
-			case 1:
-				exclusive_access.lock();
-				result = (running.get() ?
-				          PeerProtocol.initiator_restore_enhanced(this, filename) :
-				          PeerProtocol.failure());
-				exclusive_access.unlock();
-				break;
-		}
+		shared_access.lock();
+		RemoteFunction result = (running.get() ?
+		                         PeerProtocol.initiator_restore(this, filename) :
+		                         PeerProtocol.failure());
+		shared_access.unlock();
+		return result;
+	}
+
+	public RemoteFunction restore_enhanced(String filename) {
+		exclusive_access.lock();
+		RemoteFunction result = (running.get() ?
+		                         PeerProtocol.initiator_restore_enhanced(this, filename) :
+		                         PeerProtocol.failure());
+		exclusive_access.unlock();
 		return result;
 	}
 

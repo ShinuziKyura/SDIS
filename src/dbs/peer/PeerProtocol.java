@@ -37,6 +37,8 @@ public class PeerProtocol implements Runnable {
 	private String[] header;
 	private byte[] body;
 	private InetAddress address;
+	private ProtocolVersion message_version;
+	private ProtocolVersion minimum_version;
 
 	PeerProtocol(Peer peer, byte[] message) {
 		this.peer = peer;
@@ -46,6 +48,9 @@ public class PeerProtocol implements Runnable {
 
 		byte[] body = GenericArrays.split(message, header.getBytes().length)[1];
 		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
+
+		message_version = new ProtocolVersion(this.header[1]);
+		minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
 	}
 
 	PeerProtocol(Peer peer, DatagramPackage message) {
@@ -58,68 +63,68 @@ public class PeerProtocol implements Runnable {
 		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
 
 		this.address = message.address;
+
+		message_version = new ProtocolVersion(this.header[1]);
+		minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
 	}
 
 	@Override
 	public void run() {
-		ProtocolVersion message_version = new ProtocolVersion(header[1]);
-		ProtocolVersion minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
-
 		if (message_version != minimum_version) {
 			// Ours is the minimum version, can't process message
 			peer.log.print("\nReceived " + header[0] + " message:" +
 			               "\nVersion not supported");
-			return;
 		}
-
-		// Theirs is the minimum version, we'll run the appropriate protocol
-		switch (header[0].toUpperCase()) {
-			case "PUTCHUNK":
-				switch (minimum_version.toString()) {
-					case "1.0":
-						peer.shared_access.lock();
-						backup();
-						peer.shared_access.unlock();
-						break;
-					case "1.1":
-						peer.shared_access.lock();
-						backup_enhanced();
-						peer.shared_access.unlock();
-						break;
-				}
-				break;
-			case "GETCHUNK":
-				switch (minimum_version.toString()) {
-					case "1.0":
-						peer.shared_access.lock();
-						restore();
-						peer.shared_access.unlock();
-						break;
-					case "1.1":
-						peer.shared_access.lock();
-						restore_enhanced();
-						peer.shared_access.unlock();
-						break;
-				}
-				break;
-			case "DELETE":
-				switch (minimum_version.toString()) {
-					case "1.0":
-						peer.exclusive_access.lock();
-						delete();
-						peer.exclusive_access.unlock();
-						break;
-				}
-				break;
-			case "REMOVED":
-				switch (minimum_version.toString()) {
-					case "1.0":
-						peer.shared_access.lock();
-						reclaim();
-						peer.shared_access.unlock();
-						break;
-				}
-				break;
+		else {
+			// Theirs is the minimum version, we'll run the appropriate protocol
+			switch (header[0].toUpperCase()) {
+				case "PUTCHUNK":
+					switch (minimum_version.toString()) {
+						case "1.0":
+							peer.shared_access.lock();
+							backup();
+							peer.shared_access.unlock();
+							break;
+						case "1.1":
+							peer.shared_access.lock();
+							backup_enhanced();
+							peer.shared_access.unlock();
+							break;
+					}
+					break;
+				case "GETCHUNK":
+					switch (minimum_version.toString()) {
+						case "1.0":
+							peer.shared_access.lock();
+							restore();
+							peer.shared_access.unlock();
+							break;
+						case "1.1":
+							peer.shared_access.lock();
+							restore_enhanced();
+							peer.shared_access.unlock();
+							break;
+					}
+					break;
+				case "DELETE":
+					switch (minimum_version.toString()) {
+						case "1.0":
+							peer.exclusive_access.lock();
+							delete();
+							peer.exclusive_access.unlock();
+							break;
+					}
+					break;
+				case "REMOVED":
+					switch (minimum_version.toString()) {
+						case "1.0":
+							peer.shared_access.lock();
+							reclaim();
+							peer.shared_access.unlock();
+							break;
+					}
+					break;
+			}
 		}
 	}
 
@@ -240,7 +245,7 @@ public class PeerProtocol implements Runnable {
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
-		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
 		                                                   peer.ID, header[3],
 		                                                   Integer.valueOf(header[4]), null);
 
@@ -339,7 +344,7 @@ public class PeerProtocol implements Runnable {
 
 						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
 
-						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
 						                                            peer.ID, header[3],
 						                                            Integer.valueOf(header[4]), null);
 
@@ -364,7 +369,7 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-				stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+				stored = PeerUtility.generateProtocolHeader(MessageType.STORED, minimum_version,
 			                                                peer.ID, header[3],
 			                                                Integer.valueOf(header[4]), null);
 
@@ -538,7 +543,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, peer.PROTOCOL_VERSION,
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, minimum_version,
 				                                                         peer.ID, header[3].toUpperCase(),
 				                                                         Integer.valueOf(header[4]), null);
 				byte[] chunk_body = Files.readAllBytes(pathname);
@@ -569,7 +574,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, peer.PROTOCOL_VERSION,
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, minimum_version,
 				                                                         peer.ID, header[3].toUpperCase(),
 				                                                         Integer.valueOf(header[4]), null);
 				byte[] chunk_body = Files.readAllBytes(pathname);
@@ -754,7 +759,7 @@ public class PeerProtocol implements Runnable {
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
-				byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, peer.PROTOCOL_VERSION,
+				byte[] putchunk_header = PeerUtility.generateProtocolHeader(MessageType.PUTCHUNK, minimum_version,
 				                                                            peer.ID, header[3].toUpperCase(),
 				                                                            Integer.valueOf(header[4]), chunkmetadata.desired_replication);
 				byte[] putchunk_body = Files.readAllBytes(pathname);

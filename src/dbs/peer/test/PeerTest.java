@@ -74,6 +74,24 @@ public class PeerTest {
 				}
 				System.exit(0);
 			}
+			case "RESTOREENH": {
+				Path filepath = Paths.get(args[2]);
+				String filename = filepath.getFileName().toString();
+
+				@SuppressWarnings("unchecked")
+				Object restore = ((RemoteFunction<Object>) peer_interface.restore_enhanced(filename)).call();
+				if (restore instanceof byte[]) {
+					try {
+						Files.write(filepath, (byte[]) restore, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
+					} catch (IOException e) {
+						System.err.println("\nERROR! File could not be stored");
+					}
+				}
+				else {
+					System.exit((Integer) restore);
+				}
+				System.exit(0);
+			}
 			case "DELETE":
 				@SuppressWarnings("unchecked")
 				Integer delete = ((RemoteFunction<Integer>) peer_interface.delete(args[2])).call();
