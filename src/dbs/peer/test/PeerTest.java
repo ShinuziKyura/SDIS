@@ -56,6 +56,16 @@ public class PeerTest {
 				Integer backup = ((RemoteFunction<Integer>) peer_interface.backup(filename, fileID, file, Integer.valueOf(args[3]))).call();
 				System.exit(backup);
 			}
+			case "BACKUPENH": {
+				Path filepath = Paths.get(args[2]);
+				String filename = filepath.getFileName().toString();
+				String fileID = PeerUtility.generateFileID(filepath);
+				byte[] file = Files.readAllBytes(filepath);
+
+				@SuppressWarnings("unchecked")
+				Integer backup = ((RemoteFunction<Integer>) peer_interface.backup_enhanced(filename, fileID, file, Integer.valueOf(args[3]))).call();
+				System.exit(backup);
+			}
 			case "RESTORE": {
 				Path filepath = Paths.get(args[2]);
 				String filename = filepath.getFileName().toString();
