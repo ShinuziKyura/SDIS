@@ -15,6 +15,16 @@ public class DatagramChannel {
 //	protected static final String EOM = "@EOM"; // Actually we require some form of byte stuffing
 	public static final int BUFFER_SIZE = 65536; // Public for now
 
+	public static class DatagramPackage {
+		public final InetAddress address;
+		public final byte[] message;
+
+		public DatagramPackage(InetAddress address, byte[] message) {
+			this.address = address;
+			this.message = message;
+		}
+	}
+
 	protected DatagramChannel() {
 	}
 
@@ -66,7 +76,7 @@ public class DatagramChannel {
 		return message;
 	}*/
 
-	public byte[] receive() throws IOException {
+	/*public byte[] receive() throws IOException {
 		this.buffer = new byte[BUFFER_SIZE];
 
 		this.packet = new DatagramPacket(this.buffer, BUFFER_SIZE);
@@ -74,6 +84,16 @@ public class DatagramChannel {
 		this.socket.receive(this.packet);
 		
 		return Arrays.copyOf(this.packet.getData(), this.packet.getLength());
+	}*/
+
+	public DatagramPackage receive() throws IOException {
+		this.buffer = new byte[BUFFER_SIZE];
+
+		this.packet = new DatagramPacket(this.buffer, BUFFER_SIZE);
+
+		this.socket.receive(this.packet);
+
+		return new DatagramPackage(this.packet.getAddress(), Arrays.copyOf(this.packet.getData(), this.packet.getLength()));
 	}
 
 	public void close() throws IOException {

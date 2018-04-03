@@ -109,18 +109,10 @@ public class Peer implements PeerInterface {
 		
 		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
 		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
-		
-		if(!new File(METADATA_DIRECTORY).exists() && !new File(DATA_DIRECTORY).exists()) {
-			new File(METADATA_DIRECTORY).mkdirs();
-			new File(DATA_DIRECTORY).mkdirs();
 
-			files_metadata = new ConcurrentHashMap<>();
-			local_chunks_metadata = new ConcurrentHashMap<>();
-			remote_chunks_metadata = new ConcurrentHashMap<>();
-			storage_capacity = new AtomicLong(Long.MAX_VALUE);
-			storage_usage = new AtomicLong(0);
-		}
-		else if(new File(METADATA_DIRECTORY).exists() && new File(DATA_DIRECTORY).exists()){
+		File metadata = new File(METADATA_DIRECTORY);
+		File data = new File(DATA_DIRECTORY);
+		if(metadata.exists() && data.exists()) {
 			String files = FILES + (Files.exists(Paths.get(METADATA_DIRECTORY + FILES + NEW)) ? NEW : "");
 			String localchunks = LOCALCHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + LOCALCHUNKS + NEW)) ? NEW : "");
 			String remotechunks = REMOTECHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + REMOTECHUNKS + NEW)) ? NEW : "");
@@ -128,10 +120,10 @@ public class Peer implements PeerInterface {
 			String storeuse = STOREUSE + (Files.exists(Paths.get(METADATA_DIRECTORY + STOREUSE + NEW)) ? NEW : "");
 
 			try (ObjectInputStream files_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + files));
-					ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + localchunks));
-					ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + remotechunks));
-					ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storecap));
-					ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storeuse))) {
+			     ObjectInputStream localchunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + localchunks));
+			     ObjectInputStream remotechunks_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + remotechunks));
+			     ObjectInputStream storecap_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storecap));
+			     ObjectInputStream storeuse_stream = new ObjectInputStream(new FileInputStream(METADATA_DIRECTORY + storeuse))) {
 				files_metadata = (ConcurrentHashMap<String, FileMetadata>) files_stream.readObject();
 				local_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) localchunks_stream.readObject();
 				remote_chunks_metadata = (ConcurrentHashMap<String, ChunkMetadata>) remotechunks_stream.readObject();
@@ -139,10 +131,20 @@ public class Peer implements PeerInterface {
 				storage_usage = (AtomicLong) storeuse_stream.readObject();
 			}
 			catch (IOException | ClassNotFoundException e) {
-				System.err.println("\nFAILURE! Couldn't load service metadata" +
-						"\nDistributed Backup Service terminating...");
+				System.err.println("\nFAILURE! Could not load service metadata" +
+				                   "\nDistributed Backup Service terminating...");
 				System.exit(1);
 			}
+		}
+		else if (!metadata.exists() && !data.exists()) {
+			metadata.mkdirs();
+			data.mkdirs();
+
+			files_metadata = new ConcurrentHashMap<>();
+			local_chunks_metadata = new ConcurrentHashMap<>();
+			remote_chunks_metadata = new ConcurrentHashMap<>();
+			storage_capacity = new AtomicLong(Long.MAX_VALUE);
+			storage_usage = new AtomicLong(0);
 		}
 		else {
 			System.err.println("\nFAILURE! Service files missing" +
@@ -407,11 +409,23 @@ public class Peer implements PeerInterface {
 	}
 
 	public RemoteFunction restore(String filename) {
-		shared_access.lock();
-		RemoteFunction result = (running.get() ?
-		                         PeerProtocol.initiator_restore(this, filename) :
-		                         PeerProtocol.failure());
-		shared_access.unlock();
+		RemoteFunction result = null;
+		switch (PROTOCOL_VERSION.MINOR_NUMBER) {
+			case 0:
+				shared_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_restore(this, filename) :
+				          PeerProtocol.failure());
+				shared_access.unlock();
+				break;
+			case 1:
+				exclusive_access.lock();
+				result = (running.get() ?
+				          PeerProtocol.initiator_restore_enhanced(this, filename) :
+				          PeerProtocol.failure());
+				exclusive_access.unlock();
+				break;
+		}
 		return result;
 	}
 

@@ -72,6 +72,13 @@ public class PeerUtility {
 		@Override
 		public String toString() {
 			return MAJOR_NUMBER + "." + MINOR_NUMBER;
+
+		}
+
+		public static ProtocolVersion minimum(ProtocolVersion pv1, ProtocolVersion pv2) {
+			return (pv1.MAJOR_NUMBER < pv2.MAJOR_NUMBER ? pv1 :
+			        (pv1.MAJOR_NUMBER > pv2.MAJOR_NUMBER ? pv2 :
+			         (pv1.MINOR_NUMBER < pv2.MINOR_NUMBER ? pv1 : pv2)));
 		}
 	}
 

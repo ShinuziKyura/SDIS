@@ -6,7 +6,7 @@
     <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
     <extension name="coverage">
       <pattern>
-        <option name="PATTERN" value="dbs.peer.PeerChannel" />
+        <option name="PATTERN" value="dbs.peer.PeerReceiver" />
         <option name="ENABLED" value="true" />
       </pattern>
     </extension>

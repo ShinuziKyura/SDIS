@@ -2,6 +2,9 @@ package dbs.peer;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,11 +29,14 @@ import dbs.util.concurrent.LinkedTransientQueue;
 import static dbs.peer.PeerUtility.MAXIMUM_FILE_SIZE;
 import static dbs.peer.PeerUtility.MAXIMUM_CHUNK_SIZE;
 import static dbs.peer.PeerUtility.DATA_DIRECTORY;
+import static dbs.peer.PeerUtility.ProtocolVersion;
+import static dbs.nio.channels.DatagramChannel.DatagramPackage;
 
 public class PeerProtocol implements Runnable {
 	private Peer peer;
 	private String[] header;
 	private byte[] body;
+	private InetAddress address;
 
 	PeerProtocol(Peer peer, byte[] message) {
 		this.peer = peer;
@@ -42,17 +48,40 @@ public class PeerProtocol implements Runnable {
 		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
 	}
 
+	PeerProtocol(Peer peer, DatagramPackage message) {
+		this.peer = peer;
+
+		String header = new String(message.message).split("\r\n\r\n", 2)[0];
+		this.header = header.split("[ ]+");
+
+		byte[] body = GenericArrays.split(message.message, header.getBytes().length)[1];
+		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
+
+		this.address = message.address;
+	}
+
 	@Override
 	public void run() {
+		ProtocolVersion message_version = new ProtocolVersion(header[1]);
+		ProtocolVersion minimum_version = ProtocolVersion.minimum(peer.PROTOCOL_VERSION, message_version);
+
+		if (message_version != minimum_version) {
+			// Ours is the minimum version, can't process message
+			peer.log.print("\nReceived " + header[0] + " message:" +
+			               "\nVersion not supported");
+			return;
+		}
+
+		// Theirs is the minimum version, we'll run the appropriate protocol
 		switch (header[0].toUpperCase()) {
 			case "PUTCHUNK":
-				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
-					case 0:
+				switch (minimum_version.toString()) {
+					case "1.0":
 						peer.shared_access.lock();
 						backup();
 						peer.shared_access.unlock();
 						break;
-					case 1:
+					case "1.1":
 						peer.shared_access.lock();
 						backup_enhanced();
 						peer.shared_access.unlock();
@@ -60,17 +89,22 @@ public class PeerProtocol implements Runnable {
 				}
 				break;
 			case "GETCHUNK":
-				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
-					case 0:
+				switch (minimum_version.toString()) {
+					case "1.0":
 						peer.shared_access.lock();
 						restore();
+						peer.shared_access.unlock();
+						break;
+					case "1.1":
+						peer.shared_access.lock();
+						restore_enhanced();
 						peer.shared_access.unlock();
 						break;
 				}
 				break;
 			case "DELETE":
-				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
-					case 0:
+				switch (minimum_version.toString()) {
+					case "1.0":
 						peer.exclusive_access.lock();
 						delete();
 						peer.exclusive_access.unlock();
@@ -78,8 +112,8 @@ public class PeerProtocol implements Runnable {
 				}
 				break;
 			case "REMOVED":
-				switch (peer.PROTOCOL_VERSION.MINOR_NUMBER) {
-					case 0:
+				switch (minimum_version.toString()) {
+					case "1.0":
 						peer.shared_access.lock();
 						reclaim();
 						peer.shared_access.unlock();
@@ -262,49 +296,64 @@ public class PeerProtocol implements Runnable {
 	}
 
 	private void backup_enhanced() {
-		// TODO
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
 		putchunk_peers.add(peer.ID);
 
-		byte[] stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
-		                                                   peer.ID, header[3],
-		                                                   Integer.valueOf(header[4]), null);
+		LinkedTransientQueue<byte[]> messages = new LinkedTransientQueue<>();
 
+		byte[] stored;
 		if (!peer.remote_chunks_metadata.containsKey(chunkID)) {
-			if (peer.local_chunks_metadata.putIfAbsent(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers)) == null) {
-				if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
-					peer.log.print("\nBackup <- Received PUTCHUNK message:" +
-					               "\n\tSender: " + header[2] +
-					               "\n\tChunk: " + chunkID);
+			if (!peer.local_chunks_metadata.containsKey(chunkID)) {
+				if (peer.backup_messages.putIfAbsent(chunkID, messages) == null) {
+					if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
+						peer.log.print("\nBackup <- Received PUTCHUNK message:" +
+						               "\n\tSender: " + header[2] +
+						               "\n\tChunk: " + chunkID);
 
-					try {
-						Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
-						            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
+						int desired_replication = Integer.valueOf(header[5]);
+						messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
+						while ((stored = messages.poll()) != null) {
+							String sender = new String(stored).split("[ ]+")[2];
+							putchunk_peers.add(sender);
 
+							if (putchunk_peers.size() >= desired_replication) {
+								peer.storage_usage.addAndGet(-body.length);
+								peer.backup_messages.remove(chunkID);
+								return;
+							}
+						}
+
+						try {
+							Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
+							            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
+
+						}
+						catch (IOException e) {
+							// Really shouldn't happen, we won't delete the file from the local_chunks_metadata
+							peer.storage_usage.addAndGet(-body.length);
+							peer.backup_messages.remove(chunkID);
+							return;
+						}
+
+						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
+
+						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+						                                            peer.ID, header[3],
+						                                            Integer.valueOf(header[4]), null);
+
+						peer.log.print("\nBackup <- Sending STORED message:" +
+						               "\n\tChunk: " + chunkID);
+
+						peer.MCsender.send(stored);
+
+						peer.backup_messages.remove(chunkID);
 					}
-					catch (IOException e) {
-						// Really shouldn't happen, we won't delete the file from the local_chunks_metadata
+					else {
 						peer.storage_usage.addAndGet(-body.length);
-						return;
+						peer.backup_messages.remove(chunkID);
 					}
-
-					try {
-						TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(401));
-					}
-					catch (InterruptedException e) {
-						// Shouldn't happen
-					}
-
-					peer.log.print("\nBackup <- Sending STORED message:" +
-					               "\n\tChunk: " + chunkID);
-
-					peer.MCsender.send(stored);
-				}
-				else {
-					peer.local_chunks_metadata.remove(chunkID);
-					peer.storage_usage.addAndGet(-body.length);
 				}
 			}
 			else {
@@ -314,6 +363,10 @@ public class PeerProtocol implements Runnable {
 				catch (InterruptedException e) {
 					// Shouldn't happen
 				}
+
+				stored = PeerUtility.generateProtocolHeader(MessageType.STORED, peer.PROTOCOL_VERSION,
+			                                                peer.ID, header[3],
+			                                                Integer.valueOf(header[4]), null);
 
 				peer.log.print("\nBackup <- Sending STORED message:" +
 				               "\n\tChunk: " + chunkID);
@@ -395,6 +448,84 @@ public class PeerProtocol implements Runnable {
 		}, new Object[] { file });
 	}
 
+	static RemoteFunction initiator_restore_enhanced(Peer peer, String filename) {
+		FileMetadata filemetadata;
+		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File does not exist in this service metadata" +
+				                   "\nRESTORE protocol terminating...");
+				return 21;
+			});
+		}
+		if (peer.backup_messages.containsKey(filemetadata.fileID)) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! File is being backed up by this service" +
+				                   "\nRESTORE protocol terminating...");
+				return 22;
+			});
+		}
+
+		byte[] file = new byte[]{};
+
+		byte[] chunk = null;
+		int chunk_number = 0;
+		do {
+			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, peer.PROTOCOL_VERSION,
+			                                                     peer.ID, filemetadata.fileID,
+			                                                     chunk_number, null);
+
+			int requests = 0;
+			while (requests < 5) {
+				peer.log.print("\nRestore -> Sending GETCHUNK message:" +
+				               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number +
+				               "\n\tAttempt: " + (requests + 1));
+
+				try {
+					ServerSocket server_socket = new ServerSocket(peer.MDRchannel.port);
+					server_socket.setSoTimeout((1 << requests) * 1000);
+
+					peer.MCsender.send(getchunk);
+
+					Socket socket = server_socket.accept();
+					socket.setSoTimeout((1 << requests) * 1000);
+
+					chunk = socket.getInputStream().readAllBytes();
+
+					String[] chunk_header = new String(chunk).split("\r\n\r\n", 2);
+					int chunk_header_length = chunk_header[0].length() + 4;
+					chunk_header = chunk_header[0].split("[ ]+");
+
+					if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
+						peer.log.print("\nRestore -> Received CHUNK message:" +
+						               "\n\tSender: " + chunk_header[2] +
+						               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number);
+
+						file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk.length));
+						break;
+					}
+				}
+				catch (IOException e) {
+					// Timeout
+				}
+				chunk = null;
+				++requests;
+			}
+		} while (chunk != null && ++chunk_number < filemetadata.chunk_amount);
+
+		if (chunk_number != filemetadata.chunk_amount) {
+			return new RemoteFunction<>((args) -> {
+				System.err.println("\nFAILURE! Chunk " + args[0] + " could not be restored" +
+				                   "\nRESTORE protocol terminating...");
+				return 22;
+			}, new Object[]{ chunk_number });
+		}
+
+		return new RemoteFunction<>((args) -> {
+			System.out.println("\nSUCCESS! File restored");
+			return (byte[]) args[0];
+		}, new Object[] { file });
+	}
+
 	private void restore() {
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
@@ -425,6 +556,42 @@ public class PeerProtocol implements Runnable {
 				// File couldn't be read; can't risk sending corrupted files
 			}
 			peer.restore_messages.remove(chunkID);
+		}
+	}
+
+	private void restore_enhanced() {
+		String chunkID = header[3].toUpperCase() + "." + header[4];
+		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
+
+		if (peer.local_chunks_metadata.containsKey(chunkID)) {
+			try {
+				peer.log.print("\nRestore <- Received GETCHUNK message:" +
+				               "\n\tSender: " + header[2] +
+				               "\n\tChunk: " + chunkID);
+
+				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, peer.PROTOCOL_VERSION,
+				                                                         peer.ID, header[3].toUpperCase(),
+				                                                         Integer.valueOf(header[4]), null);
+				byte[] chunk_body = Files.readAllBytes(pathname);
+				byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
+
+				try {
+					Socket socket = new Socket(address, peer.MDRchannel.port);
+
+					socket.getOutputStream().write(chunk);
+
+					peer.log.print("\nRestore <- Sending CHUNK message:" +
+					               "\n\tChunk: " + chunkID);
+
+					peer.MDRsender.send(chunk);
+				}
+				catch (IOException e) {
+					// Socket couldn't connect; better luck next time
+				}
+			}
+			catch (IOException e) {
+				// File couldn't be read; can't risk sending corrupted files
+			}
 		}
 	}
 

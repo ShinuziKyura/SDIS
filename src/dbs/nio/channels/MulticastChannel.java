@@ -5,8 +5,8 @@ import java.net.MulticastSocket;
 import java.io.IOException;
 
 public class MulticastChannel extends DatagramChannel {
-	private String address;
-	private int port;
+	public final String address;
+	public final int port;
 	
 	public static int TTL = 5;
 
