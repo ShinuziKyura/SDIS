@@ -109,21 +109,18 @@ public class Peer implements PeerInterface {
 		
 		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
 		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
-
-		if(!new File(DATA_DIRECTORY).exists()) {
-			new File(DATA_DIRECTORY).mkdirs();
-		}
 		
-		if(!new File(METADATA_DIRECTORY).exists()) {
+		if(!new File(METADATA_DIRECTORY).exists() && !new File(DATA_DIRECTORY).exists()) {
 			new File(METADATA_DIRECTORY).mkdirs();
-			
+			new File(DATA_DIRECTORY).mkdirs();
+
 			files_metadata = new ConcurrentHashMap<>();
 			local_chunks_metadata = new ConcurrentHashMap<>();
 			remote_chunks_metadata = new ConcurrentHashMap<>();
 			storage_capacity = new AtomicLong(Long.MAX_VALUE);
 			storage_usage = new AtomicLong(0);
 		}
-		else {
+		else if(new File(METADATA_DIRECTORY).exists() && new File(DATA_DIRECTORY).exists()){
 			String files = FILES + (Files.exists(Paths.get(METADATA_DIRECTORY + FILES + NEW)) ? NEW : "");
 			String localchunks = LOCALCHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + LOCALCHUNKS + NEW)) ? NEW : "");
 			String remotechunks = REMOTECHUNKS + (Files.exists(Paths.get(METADATA_DIRECTORY + REMOTECHUNKS + NEW)) ? NEW : "");
@@ -146,6 +143,11 @@ public class Peer implements PeerInterface {
 						"\nDistributed Backup Service terminating...");
 				System.exit(1);
 			}
+		}
+		else {
+			System.err.println("\nFAILURE! Service files missing" +
+					"\nDistributed Backup Service terminating...");
+			System.exit(1);
 		}
 
 		backup_messages = new ConcurrentHashMap<>();
