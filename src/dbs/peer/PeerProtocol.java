@@ -599,48 +599,51 @@ public class PeerProtocol implements Runnable {
 			});
 		}
 		
+		boolean received_chunk;
 		do {
 			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, new ProtocolVersion("1.1"),
 			                                                     peer.ID, filemetadata.fileID,
 			                                                     chunk_number, null);
-
 			int requests = 0;
-			while (requests < 5) {
+			received_chunk=false;
+			while (requests < 5 && !received_chunk) {
 				peer.log.print("\nRestore -> Sending GETCHUNK message:" +
 				               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number +
 				               "\n\tAttempt: " + (requests + 1));
 
 				try {
+					
 					server_socket.setSoTimeout((1 << requests) * 1000);
-
 					peer.MCsender.send(getchunk);
-		
-					Socket socket = server_socket.accept();
 					
-					socket.setSoTimeout((1 << requests) * 1000);
-					
-					chunk = socket.getInputStream().readAllBytes();
+					do{
+						Socket socket=server_socket.accept();
 
-					String[] chunk_header = new String(chunk).split("\r\n\r\n", 2);
-					int chunk_header_length = chunk_header[0].length() + 4;
-					chunk_header = chunk_header[0].split("[ ]+");
+						socket.setSoTimeout((1 << requests) * 1000);
 
-					if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
-						peer.log.print("\nRestore -> Received CHUNK message:" +
-						               "\n\tSender: " + chunk_header[2] +
-						               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number);
+						chunk = socket.getInputStream().readAllBytes();
 
-						file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk.length));
-						break;
+						String[] chunk_header = new String(chunk).split("\r\n\r\n", 2);
+						int chunk_header_length = chunk_header[0].length() + 4;
+						chunk_header = chunk_header[0].split("[ ]+");
+
+						if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
+							peer.log.print("\nRestore -> Received CHUNK message:" +
+									"\n\tSender: " + chunk_header[2] +
+									"\n\tChunk: " + filemetadata.fileID + "." + chunk_number);
+
+							file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk.length));
+							received_chunk=true;
+						}
 					}
+					while(!received_chunk);
 				}
 				catch (IOException e) {
 					peer.log.print("Timeout");
 				}
-				chunk = null;
 				++requests;
 			}
-		} while (chunk != null && ++chunk_number < filemetadata.chunk_amount);
+		} while (received_chunk && ++chunk_number < filemetadata.chunk_amount);
 		
 		try {
 			server_socket.close();
@@ -701,31 +704,27 @@ public class PeerProtocol implements Runnable {
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
 
 		if (peer.local_chunks_metadata.containsKey(chunkID)) {
-			try {
+			try(Socket socket = new Socket(address, peer.MDRchannel.port)) {
 				peer.log.print("\nRestore <- Received GETCHUNK message:" +
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
 				byte[] chunk_header = PeerUtility.generateProtocolHeader(MessageType.CHUNK, new ProtocolVersion("1.1"),
-				                                                         peer.ID, header[3].toUpperCase(),
-				                                                         Integer.valueOf(header[4]), null);
+																						peer.ID, header[3].toUpperCase(),
+																						Integer.valueOf(header[4]), null);
 				byte[] chunk_body = Files.readAllBytes(pathname);
 				byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
 
-				try(Socket socket = new Socket(address, peer.MDRchannel.port)) {
-					
-					socket.getOutputStream().write(chunk);
-					
-					socket.getOutputStream().flush();
 
-					peer.log.print("\nRestore <- Sending CHUNK message:" +
-					               "\n\tChunk: " + chunkID);
+				socket.getOutputStream().write(chunk);
 
-					peer.MDRsender.send(chunk);
-				}
-				catch (IOException e) {
-					// Socket couldn't connect; better luck next time
-				}
+				socket.getOutputStream().flush();
+
+				peer.log.print("\nRestore <- Sending CHUNK message:" +
+						"\n\tChunk: " + chunkID);
+
+				peer.MDRsender.send(chunk);
+
 			}
 			catch (IOException e) {
 				// File couldn't be read; can't risk sending corrupted files
