@@ -429,7 +429,7 @@ public class PeerProtocol implements Runnable {
                                 Integer.valueOf(header[4]), null);
 
 						int desired_replication = Integer.valueOf(header[5]);
-						messages.clear(ThreadLocalRandom.current().nextInt(8), TimeUnit.SECONDS);
+						messages.clear(ThreadLocalRandom.current().nextInt(7), TimeUnit.SECONDS);
 						while ((message = messages.poll()) != null) {
 							String sender = new String(message).split("[ ]+")[2];
 							putchunk_peers.add(sender);
