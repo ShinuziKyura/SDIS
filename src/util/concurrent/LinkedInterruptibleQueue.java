@@ -1,4 +1,4 @@
-package dbs.util.concurrent;
+package util.concurrent;
 
 import java.util.HashSet;
 import java.util.concurrent.LinkedTransferQueue;

@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/files" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/files" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/files.old" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/localchunks" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/localchunks.old" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/remotechunks" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/remotechunks.old" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storecap" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storecap.old" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storeuse" charset="ISO-8859-1" />
-    <file url="file://$PROJECT_DIR$/src/dbs/peer/metadata/storeuse.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/files" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/files.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/localchunks" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/localchunks.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/remotechunks" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/remotechunks.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/storecap" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/storecap.old" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/storeuse" charset="ISO-8859-1" />
+    <file url="file://$PROJECT_DIR$/src/dbs/metadata/storeuse.old" charset="ISO-8859-1" />
   </component>
 </project>

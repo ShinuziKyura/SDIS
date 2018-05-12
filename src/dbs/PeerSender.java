@@ -1,9 +1,9 @@
-package dbs.peer;
+package dbs;
 
 import java.io.IOException;
 
-import dbs.nio.channels.MulticastChannel;
-import dbs.util.concurrent.LinkedInterruptibleQueue;
+import nio.channels.MulticastChannel;
+import util.concurrent.LinkedInterruptibleQueue;
 
 public class PeerSender implements Runnable {
 	private Peer peer;

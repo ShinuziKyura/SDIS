@@ -1,14 +1,14 @@
-package dbs.peer;
+package dbs;
 
 import java.time.Instant;
 
-import dbs.util.concurrent.LinkedInterruptibleQueue;
+import util.concurrent.LinkedInterruptibleQueue;
 
-public class PeerLog implements Runnable {
+public class PeerLogger implements Runnable {
 	private Peer peer;
 	private LinkedInterruptibleQueue<String> queue;
 
-	PeerLog(Peer peer) {
+	PeerLogger(Peer peer) {
 		this.peer = peer;
 		this.queue = new LinkedInterruptibleQueue<>();
 	}

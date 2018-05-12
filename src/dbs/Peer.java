@@ -1,4 +1,4 @@
-package dbs.peer;
+package dbs;
 
 import java.io.IOException;
 import java.io.File;
@@ -29,14 +29,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import static java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
-import dbs.peer.PeerUtility.ProtocolVersion;
-import dbs.peer.PeerUtility.FileMetadata;
-import dbs.peer.PeerUtility.ChunkMetadata;
-import dbs.nio.channels.MulticastChannel;
-import dbs.rmi.RemoteFunction;
-import dbs.util.concurrent.LinkedTransientQueue;
+import dbs.PeerUtility.ProtocolVersion;
+import dbs.PeerUtility.FileMetadata;
+import dbs.PeerUtility.ChunkMetadata;
+import nio.channels.MulticastChannel;
+import rmi.RemoteFunction;
+import util.concurrent.LinkedTransientQueue;
 
-import static dbs.peer.PeerUtility.*;
+import static dbs.PeerUtility.*;
 
 public class Peer implements PeerInterface {
 
@@ -115,7 +115,7 @@ public class Peer implements PeerInterface {
 	private PeerDispatcher MDBdispatcher;
 	private PeerDispatcher MDRdispatcher;
 
-	PeerLog log;
+	PeerLogger logger;
 
 	AtomicBoolean running;
 	ThreadPoolExecutor executor;
@@ -141,8 +141,8 @@ public class Peer implements PeerInterface {
 		exclusive_access = lock.writeLock();
 		shared_access = lock.readLock();
 
-		METADATA_DIRECTORY = METADATA_DIRECTORY + this.ID + "/";
-		DATA_DIRECTORY = DATA_DIRECTORY + this.ID + "/";
+		METADATA_DIRECTORY = METADATA_DIRECTORY + ID + "/";
+		DATA_DIRECTORY = DATA_DIRECTORY + ID + "/";
 
 		File metadata = new File(METADATA_DIRECTORY);
 		File data = new File(DATA_DIRECTORY);
@@ -206,7 +206,7 @@ public class Peer implements PeerInterface {
 		MDBdispatcher = new PeerDispatcher(this, MDBreceiver);
 		MDRdispatcher = new PeerDispatcher(this, MDRreceiver);
 
-		log = new PeerLog(this);
+		logger = new PeerLogger(this);
 
 		running = new AtomicBoolean(true);
 		executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
@@ -223,7 +223,7 @@ public class Peer implements PeerInterface {
 		executor.execute(MDBdispatcher);
 		executor.execute(MDRdispatcher);
 
-		executor.execute(log);
+		executor.execute(logger);
 
 		try {
 			Registry registry;
@@ -262,7 +262,7 @@ public class Peer implements PeerInterface {
 				// Won't happen
 			}
 
-			log.print("\nMain - Updating...");
+			logger.print("\nMain - Updating...");
 
 			try (ObjectOutputStream files_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + FILES + NEW));
 			     ObjectOutputStream localchunks_stream = new ObjectOutputStream(new FileOutputStream(METADATA_DIRECTORY + LOCALCHUNKS + NEW));
@@ -287,7 +287,6 @@ public class Peer implements PeerInterface {
 		}
 		catch (RemoteException | NotBoundException e) {
 			// That's weird, shouldn't happen
-			e.printStackTrace();
 		}
 
 		try {
@@ -295,7 +294,6 @@ public class Peer implements PeerInterface {
 		}
 		catch (NoSuchObjectException e) {
 			// That's weird, shouldn't... you guessed it
-			e.printStackTrace();
 		}
 
 		try {
@@ -304,7 +302,7 @@ public class Peer implements PeerInterface {
 			MDRchannel.close();
 		}
 		catch (IOException e) {
-			e.printStackTrace();
+			// I sure hope nothing goes wrong...
 		}
 
 		MCsender.stop();
@@ -315,7 +313,7 @@ public class Peer implements PeerInterface {
 		MDBreceiver.stop();
 		MDRreceiver.stop();
 
-		log.stop();
+		logger.stop();
 
 		executor.shutdown();
 		//*
@@ -337,11 +335,11 @@ public class Peer implements PeerInterface {
 		}
 
 		if (updated_metadata) {
-			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + FILES);
-			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + LOCALCHUNKS);
-			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + REMOTECHUNKS);
-			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + STORECAP);
-			PeerUtility.synchronizeFilenames(METADATA_DIRECTORY + STOREUSE);
+			PeerUtility.updateFilenames(METADATA_DIRECTORY + FILES);
+			PeerUtility.updateFilenames(METADATA_DIRECTORY + LOCALCHUNKS);
+			PeerUtility.updateFilenames(METADATA_DIRECTORY + REMOTECHUNKS);
+			PeerUtility.updateFilenames(METADATA_DIRECTORY + STORECAP);
+			PeerUtility.updateFilenames(METADATA_DIRECTORY + STOREUSE);
 		}
 		//*/
 		System.out.println("\nPeer terminated");
@@ -392,24 +390,24 @@ public class Peer implements PeerInterface {
 				shared_access.lock();
 				result = (running.get() ?
 				          PeerProtocol.initiator_backup(this, filename, fileID, file, replication_degree) :
-				          PeerProtocol.failure());
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				shared_access.unlock();
 				break;
 		}
 		return result;
 	}
 
-	public RemoteFunction backup_enhanced(String filename, String fileID, byte[] file, int replication_degree) {
+	public RemoteFunction backup_1(String filename, String fileID, byte[] file, int replication_degree) {
 		RemoteFunction result = null;
 		switch (PROTOCOL_VERSION.toString()) {
 			case "1.0":
-				result = PeerProtocol.failure_enhanced();
+				result = PeerProtocol.failure(FailureType.INCOMPAT_VERSION);
 				break;
 			case "1.1":
 				shared_access.lock();
 				result = (running.get() ?
-				          PeerProtocol.initiator_backup_enhanced(this, filename, fileID, file, replication_degree) :
-				          PeerProtocol.failure());
+				          PeerProtocol.initiator_backup_1(this, filename, fileID, file, replication_degree) :
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				shared_access.unlock();
 				break;
 		}
@@ -424,24 +422,24 @@ public class Peer implements PeerInterface {
 				shared_access.lock();
 				result = (running.get() ?
 				          PeerProtocol.initiator_restore(this, filename) :
-				          PeerProtocol.failure());
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				shared_access.unlock();
 				break;
 		}
 		return result;
 	}
 
-	public RemoteFunction restore_enhanced(String filename) {
+	public RemoteFunction restore_1(String filename) {
 		RemoteFunction result = null;
 		switch (PROTOCOL_VERSION.toString()) {
 			case "1.0":
-				result = PeerProtocol.failure_enhanced();
+				result = PeerProtocol.failure(FailureType.INCOMPAT_VERSION);
 				break;
 			case "1.1":
 				exclusive_access.lock();
 				result = (running.get() ?
-				          PeerProtocol.initiator_restore_enhanced(this, filename) :
-				          PeerProtocol.failure());
+				          PeerProtocol.initiator_restore_1(this, filename) :
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				exclusive_access.unlock();
 				break;
 		}
@@ -456,7 +454,7 @@ public class Peer implements PeerInterface {
 				shared_access.lock();
 				result = (running.get() ?
 				          PeerProtocol.initiator_delete(this, filename) :
-				          PeerProtocol.failure());
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				shared_access.unlock();
 				break;
 		}
@@ -471,7 +469,7 @@ public class Peer implements PeerInterface {
 				shared_access.lock();
 				result = (running.get() ?
 				          PeerProtocol.initiator_reclaim(this, disk_space) :
-				          PeerProtocol.failure());
+				          PeerProtocol.failure(FailureType.TERM_SERVICE));
 				shared_access.unlock();
 				break;
 		}

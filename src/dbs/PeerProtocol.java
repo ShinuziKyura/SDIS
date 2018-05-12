@@ -1,4 +1,4 @@
-package dbs.peer;
+package dbs;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,34 +19,24 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
-import dbs.peer.PeerUtility.MessageType;
-import dbs.peer.PeerUtility.FileMetadata;
-import dbs.peer.PeerUtility.ChunkMetadata;
-import dbs.rmi.RemoteFunction;
-import dbs.util.GenericArrays;
-import dbs.util.concurrent.LinkedTransientQueue;
+import dbs.PeerUtility.MessageType;
+import dbs.PeerUtility.FileMetadata;
+import dbs.PeerUtility.ChunkMetadata;
+import rmi.RemoteFunction;
+import util.GenericArrays;
+import util.concurrent.LinkedTransientQueue;
 
-import static dbs.peer.PeerUtility.MAXIMUM_FILE_SIZE;
-import static dbs.peer.PeerUtility.MAXIMUM_CHUNK_SIZE;
-import static dbs.peer.PeerUtility.DATA_DIRECTORY;
-import static dbs.peer.PeerUtility.ProtocolVersion;
-import static dbs.nio.channels.DatagramChannel.DatagramPackage;
+import static dbs.PeerUtility.MAXIMUM_FILE_SIZE;
+import static dbs.PeerUtility.MAXIMUM_CHUNK_SIZE;
+import static dbs.PeerUtility.DATA_DIRECTORY;
+import static dbs.PeerUtility.ProtocolVersion;
+import static nio.channels.DatagramChannel.DatagramPackage;
 
 public class PeerProtocol implements Runnable {
 	private Peer peer;
 	private String[] header;
 	private byte[] body;
 	private InetAddress address;
-
-	PeerProtocol(Peer peer, byte[] message) {
-		this.peer = peer;
-
-		String header = new String(message).split("\r\n\r\n", 2)[0];
-		this.header = header.split("[ ]+");
-
-		byte[] body = GenericArrays.split(message, header.getBytes().length)[1];
-		this.body = body.length > 4 ? Arrays.copyOfRange(body, 4, body.length) : new byte[]{};
-	}
 
 	PeerProtocol(Peer peer, DatagramPackage message) {
 		this.peer = peer;
@@ -67,8 +57,8 @@ public class PeerProtocol implements Runnable {
 
 		if (message_version != minimum_version) {
 			// Ours is the minimum version, can't process message
-			peer.log.print("\nReceived " + header[0] + " message:" +
-			               "\nVersion not supported");
+			peer.logger.print("\nReceived " + header[0] + " message:" +
+					"\nVersion not supported");
 		}
 		else {
 			// Theirs is the minimum version, we'll run the appropriate protocol
@@ -82,7 +72,7 @@ public class PeerProtocol implements Runnable {
 							break;
 						case "1.1":
 							peer.shared_access.lock();
-							backup_enhanced();
+							backup_1();
 							peer.shared_access.unlock();
 							break;
 					}
@@ -96,7 +86,7 @@ public class PeerProtocol implements Runnable {
 							break;
 						case "1.1":
 							peer.shared_access.lock();
-							restore_enhanced();
+							restore_1();
 							peer.shared_access.unlock();
 							break;
 					}
@@ -176,7 +166,7 @@ public class PeerProtocol implements Runnable {
 
 			int requests = 0;
 			while (stored_peers.size() < replication_degree && requests < 5) {
-				peer.log.print("\nBackup -> Sending PUTCHUNK message:" +
+				peer.logger.print("\nBackup <- Sending PUTCHUNK message:" +
 					               "\n\tChunk: " + chunkID +
 					               "\n\tAttempt: " + (requests + 1));
 
@@ -189,7 +179,7 @@ public class PeerProtocol implements Runnable {
 
 					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) &&
 					    stored_peers.add(stored_header[2])) {
-						peer.log.print("\nBackup -> Received STORED message:" +
+						peer.logger.print("\nBackup <- Received STORED message:" +
 						               "\n\tSender: " + stored_header[2] +
 						               "\n\tChunk: " + chunkID);
 					}
@@ -234,7 +224,7 @@ public class PeerProtocol implements Runnable {
 		}, new Object[]{ warnings });
 	}
 
-	static RemoteFunction initiator_backup_enhanced(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
+	static RemoteFunction initiator_backup_1(Peer peer, String filename, String fileID, byte[] file, int replication_degree) {
 		if (file.length == 0 || file.length > MAXIMUM_FILE_SIZE) {
 			return new RemoteFunction<>((args) -> {
 				System.err.println("\nFAILURE! File must be greater than 0 bytes and less than 64 gigabytes" +
@@ -287,7 +277,7 @@ public class PeerProtocol implements Runnable {
 
 			int requests = 0;
 			while (stored_peers.size() < replication_degree && requests < 5) {
-				peer.log.print("\nBackup -> Sending PUTCHUNK message:" +
+				peer.logger.print("\nBackup <- Sending PUTCHUNK message:" +
 				               "\n\tChunk: " + chunkID +
 				               "\n\tAttempt: " + (requests + 1));
 
@@ -300,7 +290,7 @@ public class PeerProtocol implements Runnable {
 
 					if (chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) &&
 					    stored_peers.add(stored_header[2])) {
-						peer.log.print("\nBackup -> Received STORED message:" +
+						peer.logger.print("\nBackup <- Received STORED message:" +
 						               "\n\tSender: " + stored_header[2] +
 						               "\n\tChunk: " + chunkID);
 					}
@@ -358,7 +348,7 @@ public class PeerProtocol implements Runnable {
 		if (!peer.remote_chunks_metadata.containsKey(chunkID)) {
 			if (peer.local_chunks_metadata.putIfAbsent(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers)) == null) {
 				if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
-					peer.log.print("\nBackup <- Received PUTCHUNK message:" +
+					peer.logger.print("\nBackup -> Received PUTCHUNK message:" +
 					               "\n\tSender: " + header[2] +
 					               "\n\tChunk: " + chunkID);
 
@@ -380,7 +370,7 @@ public class PeerProtocol implements Runnable {
 						// Shouldn't happen
 					}
 
-					peer.log.print("\nBackup <- Sending STORED message:" +
+					peer.logger.print("\nBackup -> Sending STORED message:" +
 					               "\n\tChunk: " + chunkID);
 
 					peer.MCsender.send(stored);
@@ -398,7 +388,7 @@ public class PeerProtocol implements Runnable {
 					// Shouldn't happen
 				}
 
-				peer.log.print("\nBackup <- Sending STORED message:" +
+				peer.logger.print("\nBackup -> Sending STORED message:" +
 				               "\n\tChunk: " + chunkID);
 
 				peer.MCsender.send(stored);
@@ -406,7 +396,7 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	private void backup_enhanced() {
+	private void backup_1() {
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 
 		Set<String> putchunk_peers = ConcurrentHashMap.newKeySet();
@@ -420,27 +410,27 @@ public class PeerProtocol implements Runnable {
 			if (!peer.local_chunks_metadata.containsKey(chunkID)) {
 				if (peer.backup_messages.putIfAbsent(chunkID, messages) == null) {
 					if (peer.storage_usage.addAndGet(body.length) <= peer.storage_capacity.get()) {
-						peer.log.print("\nBackup <- Received PUTCHUNK message:" +
+						peer.logger.print("\nBackup -> Received PUTCHUNK message:" +
 						               "\n\tSender: " + header[2] +
 						               "\n\tChunk: " + chunkID);
-						
+
 						stored = PeerUtility.generateProtocolHeader(MessageType.STORED, new ProtocolVersion("1.1"),
                                 peer.ID, header[3],
                                 Integer.valueOf(header[4]), null);
 
 						int desired_replication = Integer.valueOf(header[5]);
-						messages.clear(ThreadLocalRandom.current().nextInt(8), TimeUnit.SECONDS);
+						messages.clear(ThreadLocalRandom.current().nextInt(15), TimeUnit.SECONDS);
 						while ((message = messages.poll()) != null) {
 							String sender = new String(message).split("[ ]+")[2];
 							putchunk_peers.add(sender);
-							
+
 							if (putchunk_peers.size() > desired_replication) {
 								peer.storage_usage.addAndGet(-body.length);
 								peer.backup_messages.remove(chunkID);
 								return;
 							}
 						}
-						
+
 						try {
 							Files.write(Paths.get(DATA_DIRECTORY + chunkID), body,
 							            StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);
@@ -454,10 +444,10 @@ public class PeerProtocol implements Runnable {
 						}
 
 						peer.MCsender.send(stored);
-						
+
 						peer.local_chunks_metadata.put(chunkID, new ChunkMetadata(body.length, Integer.valueOf(header[5]), putchunk_peers));
-						
-						peer.log.print("\nBackup <- Sending STORED message:" +
+
+						peer.logger.print("\nBackup -> Sending STORED message:" +
 					               "\n\tChunk: " + chunkID);
 
 						peer.backup_messages.remove(chunkID);
@@ -480,7 +470,7 @@ public class PeerProtocol implements Runnable {
 			                                                peer.ID, header[3],
 			                                                Integer.valueOf(header[4]), null);
 
-				peer.log.print("\nBackup <- Sending STORED message:" +
+				peer.logger.print("\nBackup -> Sending STORED message:" +
 				               "\n\tChunk: " + chunkID);
 
 				peer.MCsender.send(stored);
@@ -520,7 +510,7 @@ public class PeerProtocol implements Runnable {
 			chunk = null;
 			int requests = 0;
 			while (chunk == null && requests < 5) {
-				peer.log.print("\nRestore -> Sending GETCHUNK message:" +
+				peer.logger.print("\nRestore <- Sending GETCHUNK message:" +
 					               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number +
 					               "\n\tAttempt: " + (requests + 1));
 
@@ -533,7 +523,7 @@ public class PeerProtocol implements Runnable {
 					chunk_header = chunk_header[0].split("[ ]+");
 
 					if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
-						peer.log.print("\nRestore -> Received CHUNK message:" +
+						peer.logger.print("\nRestore <- Received CHUNK message:" +
 						               "\n\tSender: " + chunk_header[2] +
 						               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number);
 
@@ -560,7 +550,7 @@ public class PeerProtocol implements Runnable {
 		}, new Object[] { file });
 	}
 
-	static RemoteFunction initiator_restore_enhanced(Peer peer, String filename) {
+	static RemoteFunction initiator_restore_1(Peer peer, String filename) {
 		FileMetadata filemetadata;
 		if ((filemetadata = peer.files_metadata.get(filename)) == null) {
 			return new RemoteFunction<>((args) -> {
@@ -575,7 +565,7 @@ public class PeerProtocol implements Runnable {
 		byte[] chunk = null;
 		int chunk_number = 0;
 		ServerSocket server_socket;
-		
+
 		try {
 			server_socket = new ServerSocket(peer.MDRchannel.port);
 		} catch (IOException e1) {
@@ -585,7 +575,7 @@ public class PeerProtocol implements Runnable {
 				return 22;
 			});
 		}
-		
+
 		boolean received_chunk;
 		do {
 			byte[] getchunk = PeerUtility.generateProtocolHeader(MessageType.GETCHUNK, new ProtocolVersion("1.1"),
@@ -594,43 +584,43 @@ public class PeerProtocol implements Runnable {
 			int requests = 0;
 			received_chunk=false;
 			while (requests < 5 && !received_chunk) {
-				peer.log.print("\nRestore -> Sending GETCHUNK message:" +
+				peer.logger.print("\nRestore <- Sending GETCHUNK message:" +
 				               "\n\tChunk: " + filemetadata.fileID + "." + chunk_number +
 				               "\n\tAttempt: " + (requests + 1));
 
 				try {
-					
 					server_socket.setSoTimeout(1000 << requests);
 					peer.MCsender.send(getchunk);
-					
+
 					do{
-						Socket socket=server_socket.accept();
+						chunk = new byte[65536];
+						Socket socket = server_socket.accept();
 
-						socket.setSoTimeout(1000 << requests);
+						// socket.setSoTimeout(1000 << requests);
 
-						chunk = socket.getInputStream().readAllBytes();
+						int chunk_length = socket.getInputStream().read(chunk);
 
 						String[] chunk_header = new String(chunk).split("\r\n\r\n", 2);
 						int chunk_header_length = chunk_header[0].length() + 4;
 						chunk_header = chunk_header[0].split("[ ]+");
 
 						if (filemetadata.fileID.equals(chunk_header[3].toUpperCase()) && chunk_number == Integer.valueOf(chunk_header[4])) {
-							peer.log.print("\nRestore -> Received CHUNK message:" +
+							peer.logger.print("\nRestore <- Received CHUNK message:" +
 									"\n\tSender: " + chunk_header[2] +
 									"\n\tChunk: " + filemetadata.fileID + "." + chunk_number);
 
-							file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk.length));
-							received_chunk=true;
+							file = GenericArrays.join(file, Arrays.copyOfRange(chunk, chunk_header_length, chunk_length));
+							received_chunk = true;
 						}
 					}
-					while(!received_chunk);
+					while (!received_chunk);
 				}
 				catch (IOException e) {
 				}
 				++requests;
 			}
 		} while (received_chunk && ++chunk_number < filemetadata.chunk_amount);
-		
+
 		try {
 			server_socket.close();
 		} catch (IOException e) {
@@ -658,7 +648,7 @@ public class PeerProtocol implements Runnable {
 
 		if (peer.local_chunks_metadata.containsKey(chunkID) && peer.restore_messages.putIfAbsent(chunkID, messages) == null) {
 			try {
-				peer.log.print("\nRestore <- Received GETCHUNK message:" +
+				peer.logger.print("\nRestore -> Received GETCHUNK message:" +
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
@@ -670,7 +660,7 @@ public class PeerProtocol implements Runnable {
 
 				messages.clear(ThreadLocalRandom.current().nextInt(401), TimeUnit.MILLISECONDS);
 				if(messages.poll() == null) {
-					peer.log.print("\nRestore <- Sending CHUNK message:" +
+					peer.logger.print("\nRestore -> Sending CHUNK message:" +
 					               "\n\tChunk: " + chunkID);
 
 					peer.MDRsender.send(chunk);
@@ -683,13 +673,13 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	private void restore_enhanced() {
+	private void restore_1() {
 		String chunkID = header[3].toUpperCase() + "." + header[4];
 		Path pathname = Paths.get(DATA_DIRECTORY + chunkID);
 
 		if (peer.local_chunks_metadata.containsKey(chunkID)) {
 			try(Socket socket = new Socket(address, peer.MDRchannel.port)) {
-				peer.log.print("\nRestore <- Received GETCHUNK message:" +
+				peer.logger.print("\nRestore -> Received GETCHUNK message:" +
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
@@ -699,12 +689,11 @@ public class PeerProtocol implements Runnable {
 				byte[] chunk_body = Files.readAllBytes(pathname);
 				byte[] chunk = GenericArrays.join(chunk_header, chunk_body);
 
-
 				socket.getOutputStream().write(chunk);
 
 				socket.getOutputStream().flush();
 
-				peer.log.print("\nRestore <- Sending CHUNK message:" +
+				peer.logger.print("\nRestore -> Sending CHUNK message:" +
 						"\n\tChunk: " + chunkID);
 
 				peer.MDRsender.send(chunk);
@@ -748,7 +737,7 @@ public class PeerProtocol implements Runnable {
 						}
 					}
 
-					peer.log.print("\nDelete -> Sending DELETE message:" +
+					peer.logger.print("\nDelete <- Sending DELETE message:" +
 					               "\n\tFile: " + filemetadata.fileID +
 					               "\n\tAttempt: " + (requests + 2));
 
@@ -770,7 +759,7 @@ public class PeerProtocol implements Runnable {
 				(dir, name) -> name.matches(header[3].toUpperCase() + "\\.([1-9][0-9]{0,5}|0)"));
 
 		if (chunks != null) {
-			peer.log.print("\nDelete <- Received DELETE message:" +
+			peer.logger.print("\nDelete -> Received DELETE message:" +
 			               "\n\tSender: " + header[2] +
 			               "\n\tFile: " + header[3].toUpperCase());
 
@@ -804,7 +793,7 @@ public class PeerProtocol implements Runnable {
 				for (File chunk : chunks) {
 					if (peer.local_chunks_metadata.remove(chunk.getName()) != null) {
 						peer.storage_usage.addAndGet(-chunk.length());
-						
+
 						chunk.delete();
 
 						String[] chunkmetadata = chunk.getName().split("\\.");
@@ -813,7 +802,7 @@ public class PeerProtocol implements Runnable {
 						                                                    peer.ID, chunkmetadata[0],
 						                                                    Integer.valueOf(chunkmetadata[1]), null);
 
-						peer.log.print("\nReclaim -> Sending REMOVED message:" +
+						peer.logger.print("\nReclaim <- Sending REMOVED message:" +
 						               "\n\tChunk: " + chunk.getName());
 
 						peer.MCsender.send(removed);
@@ -844,7 +833,7 @@ public class PeerProtocol implements Runnable {
 						                                                    peer.ID, chunkmetadata[0],
 						                                                    Integer.valueOf(chunkmetadata[1]), null);
 
-						peer.log.print("\nReclaim -> Sending REMOVED message:" +
+						peer.logger.print("\nReclaim <- Sending REMOVED message:" +
 						               "\n\tChunk: " + chunkIDs[n]);
 
 						peer.MCsender.send(removed);
@@ -871,7 +860,7 @@ public class PeerProtocol implements Runnable {
 		if (chunkmetadata != null && chunkmetadata.desired_replication > chunkmetadata.perceived_replication.size() &&
 		    peer.reclaim_messages.putIfAbsent(chunkID, messages) == null) {
 			try {
-				peer.log.print("\nReclaim <- Received REMOVED message:" +
+				peer.logger.print("\nReclaim -> Received REMOVED message:" +
 				               "\n\tSender: " + header[2] +
 				               "\n\tChunk: " + chunkID);
 
@@ -885,7 +874,7 @@ public class PeerProtocol implements Runnable {
 				if (messages.poll() == null) {
 					int requests = 0;
 					while (chunkmetadata.perceived_replication.size() < chunkmetadata.desired_replication && requests < 5) {
-						peer.log.print("\nReclaim <- Sending PUTCHUNK message:" +
+						peer.logger.print("\nReclaim -> Sending PUTCHUNK message:" +
 						               "\n\tChunk: " + chunkID +
 						               "\n\tAttempt: " + (requests + 1));
 
@@ -901,7 +890,7 @@ public class PeerProtocol implements Runnable {
 							if (stored_header[0].equals("STORED") &&
 							    chunkID.equals(stored_header[3].toUpperCase() + "." + stored_header[4]) &&
 							    (chunkmetadata.perceived_replication.add(stored_header[2]) || stored_peers.add(stored_header[2]))) {
-								peer.log.print("\nReclaim <- Received STORED message:" +
+								peer.logger.print("\nReclaim -> Received STORED message:" +
 								               "\n\tSender: " + header[2] +
 								               "\n\tChunk: " + chunkID);
 							}
@@ -909,7 +898,7 @@ public class PeerProtocol implements Runnable {
 					}
 				}
 				else {
-					peer.log.print("\nReclaim <- Received PUTCHUNK message:" +
+					peer.logger.print("\nReclaim -> Received PUTCHUNK message:" +
 					               "\n\tSender: " + header[2] +
 					               "\n\tChunk: " + chunkID);
 				}
@@ -922,18 +911,21 @@ public class PeerProtocol implements Runnable {
 		}
 	}
 
-	static RemoteFunction failure() {
-		return new RemoteFunction<>((args) -> {
-			System.err.println("\nFAILURE! Peer process is stopping" +
-			                   "\nDistributed Backup Service terminating...");
-			return 1;
-		});
-	}
-
-	static RemoteFunction failure_enhanced() {
-		return new RemoteFunction<>((args) -> {
-			System.err.println("\nFAILURE! Protocol version not supported");
-			return 1;
-		});
+	static RemoteFunction failure(PeerUtility.FailureType type) {
+		switch (type) {
+			case TERM_SERVICE:
+				return new RemoteFunction<>((args) -> {
+					System.err.println("\nFAILURE! Peer process is stopping" +
+					                   "\nProtocol terminating...");
+					return 1;
+				});
+			case INCOMPAT_VERSION:
+				return new RemoteFunction<>((args) -> {
+					System.err.println("\nFAILURE! Protocol version not supported" +
+					                   "\nProtocol terminating...");
+					return 2;
+				});
+		}
+		return null;
 	}
 }

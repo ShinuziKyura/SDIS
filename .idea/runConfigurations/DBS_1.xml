@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="DBS-1" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="dbs.peer.Peer" />
+    <option name="MAIN_CLASS_NAME" value="dbs.Peer" />
     <module name="SDIS" />
-    <option name="PROGRAM_PARAMETERS" value="1.0 1 DBS_1_TEST 225.0.0.0 8000 225.0.0.0 8001 225.0.0.0 8002" />
+    <option name="PROGRAM_PARAMETERS" value="1.1 1 DBS_1_TEST 225.0.0.0 8000 225.0.0.0 8001 225.0.0.0 8002" />
     <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
     <extension name="coverage">
       <pattern>

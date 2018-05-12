@@ -1,11 +1,11 @@
-package dbs.peer;
+package dbs;
 
 import java.io.IOException;
 
-import dbs.nio.channels.MulticastChannel;
-import dbs.util.concurrent.LinkedInterruptibleQueue;
+import nio.channels.MulticastChannel;
+import util.concurrent.LinkedInterruptibleQueue;
 
-import static dbs.nio.channels.DatagramChannel.DatagramPackage;
+import static nio.channels.DatagramChannel.DatagramPackage;
 
 public class PeerReceiver implements Runnable {
 	private Peer peer;

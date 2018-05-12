@@ -1,9 +1,9 @@
-package dbs.peer;
+package dbs;
 
-import dbs.util.concurrent.LinkedTransientQueue;
-import dbs.peer.PeerUtility.ChunkMetadata;
+import util.concurrent.LinkedTransientQueue;
+import dbs.PeerUtility.ChunkMetadata;
 
-import static dbs.nio.channels.DatagramChannel.DatagramPackage;
+import static nio.channels.DatagramChannel.DatagramPackage;
 
 public class PeerDispatcher implements Runnable {
 	private Peer peer;
@@ -36,12 +36,12 @@ public class PeerDispatcher implements Runnable {
 						}
 					}
 					case "DELETE": // MC
-						peer.executor.execute(new PeerProtocol(peer, buffer.message));
+						peer.executor.execute(new PeerProtocol(peer, buffer));
 						break;
 					case "GETCHUNK": // MC
 						switch (peer.PROTOCOL_VERSION.toString()) {
 							case "1.0":
-								peer.executor.execute(new PeerProtocol(peer, buffer.message));
+								peer.executor.execute(new PeerProtocol(peer, buffer));
 								break;
 							case "1.1":
 								peer.executor.execute(new PeerProtocol(peer, buffer));
@@ -97,7 +97,7 @@ public class PeerDispatcher implements Runnable {
 						if ((chunkmetadata = peer.local_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4])) != null) {
 							chunkmetadata.perceived_replication.remove(message_header[2]);
 
-							peer.executor.execute(new PeerProtocol(peer, buffer.message));
+							peer.executor.execute(new PeerProtocol(peer, buffer));
 						}
 						// The chunk may belong to a file we backed up: decrease count of chunks
 						else if ((chunkmetadata = peer.remote_chunks_metadata.get(message_header[3].toUpperCase() + "." + message_header[4])) != null) {

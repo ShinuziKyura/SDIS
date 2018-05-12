@@ -1,4 +1,4 @@
-package dbs.util.concurrent;
+package util.concurrent;
 
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.TimeUnit;

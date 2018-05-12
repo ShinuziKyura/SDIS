@@ -1,4 +1,4 @@
-package dbs.peer.test;
+package dbs.test;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,9 +8,9 @@ import java.nio.file.StandardOpenOption;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 
-import dbs.peer.PeerInterface;
-import dbs.peer.PeerUtility;
-import dbs.rmi.RemoteFunction;
+import dbs.PeerInterface;
+import dbs.PeerUtility;
+import rmi.RemoteFunction;
 
 public class PeerTest {
 	public static void main(String[] args) throws NotBoundException, IOException {
@@ -63,7 +63,7 @@ public class PeerTest {
 				byte[] file = Files.readAllBytes(filepath);
 
 				@SuppressWarnings("unchecked")
-				Integer backup = ((RemoteFunction<Integer>) peer_interface.backup_enhanced(filename, fileID, file, Integer.valueOf(args[3]))).call();
+				Integer backup = ((RemoteFunction<Integer>) peer_interface.backup_1(filename, fileID, file, Integer.valueOf(args[3]))).call();
 				System.exit(backup);
 			}
 			case "RESTORE": {
@@ -89,7 +89,7 @@ public class PeerTest {
 				String filename = filepath.getFileName().toString();
 
 				@SuppressWarnings("unchecked")
-				Object restore = ((RemoteFunction<Object>) peer_interface.restore_enhanced(filename)).call();
+				Object restore = ((RemoteFunction<Object>) peer_interface.restore_1(filename)).call();
 				if (restore instanceof byte[]) {
 					try {
 						Files.write(filepath, (byte[]) restore, StandardOpenOption.CREATE_NEW, StandardOpenOption.DSYNC);

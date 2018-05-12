@@ -1,4 +1,4 @@
-package dbs.peer;
+package dbs;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,8 +27,8 @@ public class PeerUtility {
 	public static final long MAXIMUM_FILE_SIZE = 63999999999L;
 	public static final int MAXIMUM_CHUNK_SIZE = 64000;
 	
-	public static String METADATA_DIRECTORY = "bin/metadata/";
-	public static String DATA_DIRECTORY = "bin/data/";
+	public static String METADATA_DIRECTORY = "src/dbs/metadata/";
+	public static String DATA_DIRECTORY = "src/dbs/data/";
 
 	public static final String FILES = "files";
 	public static final String LOCALCHUNKS = "localchunks";
@@ -38,17 +38,16 @@ public class PeerUtility {
 	public static final String NEW = ".new";
 	public static final String OLD = ".old";
 
-	public static final MessageDigest SHA_256_HASHER = SHA_256_HASHER();
-    private static MessageDigest SHA_256_HASHER() {
+	public static MessageDigest SHA_256_HASHER;
+    static {
         try {
-            return MessageDigest.getInstance("SHA-256");
+	        SHA_256_HASHER = MessageDigest.getInstance("SHA-256");
         }
         catch (NoSuchAlgorithmException e) {
 	        System.err.println("\nFAILURE! Could not find instance of SHA-256 in system" +
 	                           "\nDistributed Backup Service terminating...");
             System.exit(1); // The Uh-Oh-That-Cant-Be-Good status code
         }
-        return null;
     }
 
 	public enum MessageType {
@@ -58,6 +57,11 @@ public class PeerUtility {
         CHUNK,
         DELETE,
         REMOVED
+    }
+
+    public enum FailureType {
+    	TERM_SERVICE,
+    	INCOMPAT_VERSION
     }
 
 	public static class ProtocolVersion {
@@ -152,7 +156,7 @@ public class PeerUtility {
         return header.append("\r\n\r\n").toString().getBytes();
     }
 
-    public static void synchronizeFilenames(String filename) {
+    public static void updateFilenames(String filename) {
 	    File file_old = new File(filename.concat(OLD));
 	    File file = new File(filename);
 	    File file_new = new File(filename.concat(NEW));

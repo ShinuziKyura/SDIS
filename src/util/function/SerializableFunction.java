@@ -1,4 +1,4 @@
-package dbs.util.function;
+package util.function;
 
 import java.io.Serializable;
 import java.util.function.Function;

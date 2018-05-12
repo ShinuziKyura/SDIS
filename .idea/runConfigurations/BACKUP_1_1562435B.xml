@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="BACKUP-1-1562435B" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="dbs.peer.test.PeerTest" />
+    <option name="MAIN_CLASS_NAME" value="dbs.test.PeerTest" />
     <module name="SDIS" />
     <option name="PROGRAM_PARAMETERS" value="DBS_1_TEST BACKUP src\dbs\peer\test\backup\1562435B.txt 1" />
     <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />

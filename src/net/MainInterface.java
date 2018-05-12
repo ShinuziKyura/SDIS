@@ -1,4 +1,4 @@
-package dbs.net;
+package net;
 
 import java.io.IOException;
 import java.net.Inet6Address;

@@ -1,4 +1,4 @@
-package dbs.util;
+package util;
 
 import java.lang.reflect.Array;
 

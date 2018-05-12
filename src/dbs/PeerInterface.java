@@ -1,6 +1,6 @@
-package dbs.peer;
+package dbs;
 
-import dbs.rmi.RemoteFunction;
+import rmi.RemoteFunction;
 
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -12,11 +12,11 @@ public interface PeerInterface extends Remote {
 
     RemoteFunction backup(String filename, String fileID, byte[] file, int replication_degree) throws RemoteException;
 
-	RemoteFunction backup_enhanced(String filename, String fileID, byte[] file, int replication_degree) throws RemoteException;
+	RemoteFunction backup_1(String filename, String fileID, byte[] file, int replication_degree) throws RemoteException;
 
     RemoteFunction restore(String filename) throws RemoteException;
 
-    RemoteFunction restore_enhanced(String filename) throws RemoteException;
+    RemoteFunction restore_1(String filename) throws RemoteException;
 
     RemoteFunction delete(String filename) throws RemoteException;
 

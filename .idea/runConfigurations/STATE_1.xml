@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="STATE-1" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="dbs.peer.test.PeerTest" />
+    <option name="MAIN_CLASS_NAME" value="dbs.test.PeerTest" />
     <module name="SDIS" />
     <option name="PROGRAM_PARAMETERS" value="DBS_1_TEST STATE" />
     <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
